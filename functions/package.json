@@ -1,0 +1,13 @@
+{
+  "name": "yorisoi-ai-functions",
+  "private": true,
+  "description": "Firebase Cloud Functions stubs for よりそいAI (Phase 3+).",
+  "engines": {
+    "node": "20"
+  },
+  "main": "lib/index.js",
+  "scripts": {
+    "build": "echo \"Functions are stubbed. Wire Firebase in Phase 3.\"",
+    "serve": "echo \"Not configured yet\""
+  }
+}
