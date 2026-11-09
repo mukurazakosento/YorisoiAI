@@ -26,6 +26,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.3.0",
+    "tsx": "^4.23.15",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -35,7 +36,7 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "smoke:ai": "node scripts/smoke-ai-phase3.mjs",
-    "smoke:ocr": "node scripts/smoke-ocr-phase4.mjs"
+    "smoke:ocr": "node --import tsx scripts/smoke-ocr-phase4.mjs"
   },
   "private": true
 }

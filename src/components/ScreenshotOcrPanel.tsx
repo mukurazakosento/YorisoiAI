@@ -6,32 +6,34 @@ import { layout } from '../constants/layout';
 import { baseFontSizes } from '../constants/typography';
 import { useSettings } from '../hooks/useSettings';
 import {
-  buildLayoutHints,
   getOcrAvailability,
   pickAndRecognizeScreenshot,
-  type OcrResult,
 } from '../services/ocr';
 import { InfoCard } from './InfoCard';
 import { PrimaryButton } from './PrimaryButton';
 import { TextInputField } from './TextInputField';
 
+/**
+ * OCR 確認画面で利用者が確定した最終テキストのみ。
+ * layoutHints / 生 OCR 結果 / 画像 URI は含めない（AI 送信禁止のため）。
+ */
 export type ConfirmedOcrPayload = {
   text: string;
-  layoutHints: string;
-  result: OcrResult;
 };
 
 type ScreenshotOcrPanelProps = {
-  /** 利用者が確認したテキストだけが渡る。画像は渡らない。 */
+  /** 利用者が確認・編集したテキストだけが渡る。画像は渡らない。 */
   onConfirmed: (payload: ConfirmedOcrPayload) => void;
+  /** 読み取り中止・取り消し。OCR 自動投入分のクリアは親が行う。 */
   onCleared?: () => void;
 };
 
 type Phase = 'idle' | 'running' | 'review' | 'confirmed';
 
 /**
- * スクリーンショット選択 → 端末内 OCR → 確認/修正 → 相談へ渡す UI。
+ * スクリーンショット選択 → 端末内 OCR → 確認/修正 UI。
  * 画像バイナリは AI / サーバーへ送らない。
+ * 未確認の OCR 結果は親（相談送信）へ渡さない。
  */
 export function ScreenshotOcrPanel({
   onConfirmed,
@@ -43,7 +45,6 @@ export function ScreenshotOcrPanel({
   const [phase, setPhase] = useState<Phase>('idle');
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [draftText, setDraftText] = useState('');
-  const [ocrResult, setOcrResult] = useState<OcrResult | null>(null);
   const [confirmedText, setConfirmedText] = useState<string | null>(null);
 
   const handlePick = async () => {
@@ -53,7 +54,6 @@ export function ScreenshotOcrPanel({
 
     setPhase('running');
     setStatusMessage('写真から画面を選んでいます…');
-    setConfirmedText(null);
 
     const outcome = await pickAndRecognizeScreenshot();
 
@@ -68,20 +68,19 @@ export function ScreenshotOcrPanel({
       outcome.status === 'unavailable' ||
       outcome.status === 'error'
     ) {
-      setPhase('idle');
+      setPhase(confirmedText ? 'confirmed' : 'idle');
       setStatusMessage(outcome.message);
       return;
     }
 
     if (outcome.status === 'empty') {
-      setOcrResult(outcome.result);
       setDraftText('');
       setPhase('review');
       setStatusMessage(outcome.message);
       return;
     }
 
-    setOcrResult(outcome.result);
+    // 生 OCR は確認用ドラフトにだけ載せ、親へは confirm まで渡さない
     setDraftText(outcome.result.fullText);
     setPhase('review');
     setStatusMessage(
@@ -91,26 +90,26 @@ export function ScreenshotOcrPanel({
 
   const handleConfirm = () => {
     const text = draftText.trim();
-    if (!text || !ocrResult) {
+    if (!text) {
       setStatusMessage(
         '相談に使う文字が空です。必要な部分を残すか、下に自分で書いてください。',
       );
       return;
     }
 
-    const layoutHints = buildLayoutHints(ocrResult);
     setConfirmedText(text);
     setPhase('confirmed');
+    setDraftText('');
     setStatusMessage(
-      '確認した文字だけを相談に使います。画像そのものは送りません。',
+      '確認した文字だけを相談欄に入れます。あとから相談欄で直した内容が送られます。画像は送りません。',
     );
-    onConfirmed({ text, layoutHints, result: ocrResult });
+    // 確定・編集後のテキストのみ。layoutHints / raw OCR は渡さない。
+    onConfirmed({ text });
   };
 
   const handleClear = () => {
     setPhase('idle');
     setDraftText('');
-    setOcrResult(null);
     setConfirmedText(null);
     setStatusMessage(null);
     onCleared?.();
@@ -173,7 +172,7 @@ export function ScreenshotOcrPanel({
               { fontSize: fontSize(baseFontSizes.caption) },
             ]}
           >
-            相談に使う文字（確認済み）
+            取り込み済み（相談欄の文字が送られます）
           </Text>
           <Text
             style={[

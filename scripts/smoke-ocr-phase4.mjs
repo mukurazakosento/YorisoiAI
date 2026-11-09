@@ -1,16 +1,13 @@
 /**
- * Phase 4 のオフライン OCR スモーク（実機 ML Kit / 画像不要）。
- * 使い方: node scripts\smoke-ocr-phase4.mjs
- *
- * - 画像を外部へ送るコード経路がサービス境界に無いこと
- * - 確認済みテキストの組み立てが URI / Base64 を混ぜないこと
- * - 相対位置ヒントが安全に生成できること
+ * Phase 4 OCR スモーク — アプリ本体と同じ consultationText 組み立てを直接検証する。
+ * 使い方: npm run smoke:ocr
+ * （package.json 経由で tsx を import し、.ts 実モジュールを読む）
  */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -20,7 +17,7 @@ function read(rel) {
   return fs.readFileSync(path.join(root, rel), 'utf8');
 }
 
-// --- Source guardrails: image bytes must never leave the device via AI / Functions ---
+// --- Source guardrails ---
 const aiIndex = read('src/services/ai/index.ts');
 assert.doesNotMatch(
   aiIndex,
@@ -36,6 +33,19 @@ const ocrIndex = read('src/services/ocr/index.ts');
 assert.match(ocrIndex, /画像バイナリは Gemini・Firebase/);
 assert.match(ocrIndex, /deleteTempImageUri/);
 assert.match(ocrIndex, /recognizeJapaneseText|yorisoi-mlkit-ocr/);
+assert.match(ocrIndex, /assembleConsultationSendText/);
+
+const screen = read('src/screens/ConsultationScreen.tsx');
+assert.match(screen, /assembleConsultationSendText/);
+assert.match(screen, /applyOcrConfirmation/);
+assert.match(screen, /clearOcrAutofill/);
+assert.doesNotMatch(screen, /buildConsultationTextFromConfirmedOcr/);
+assert.doesNotMatch(screen, /confirmedOcr\.text/);
+assert.doesNotMatch(screen, /buildLayoutHints\(/);
+
+const panel = read('src/components/ScreenshotOcrPanel.tsx');
+assert.doesNotMatch(panel, /buildLayoutHints\(/);
+assert.match(panel, /onConfirmed\(\{ text \}\)/);
 
 const swift = read('modules/yorisoi-mlkit-ocr/ios/YorisoiMlkitOcrModule.swift');
 assert.match(swift, /JapaneseTextRecognizerOptions/);
@@ -47,83 +57,98 @@ const androidStub = read(
 );
 assert.match(androidStub, /OCR_ANDROID_NOT_READY|これから用意/);
 
-// --- Pure JS helpers (no RN native) ---
-function clamp01(value) {
-  if (Number.isNaN(value)) return 0;
-  if (value < 0) return 0;
-  if (value > 1) return 1;
-  return value;
+// --- Import the REAL assembly module used by ConsultationScreen ---
+const consultationTextUrl = pathToFileURL(
+  path.join(root, 'src/services/ocr/consultationText.ts'),
+).href;
+const {
+  applyOcrConfirmation,
+  assembleConsultationSendText,
+  clearOcrAutofill,
+  consultationPayloadLooksSafe,
+  createEmptyOcrInputState,
+} = await import(consultationTextUrl);
+
+/**
+ * 相談画面と同じ送信組み立て。
+ * AI に渡す text はこれだけ（choiceLabel は別フィールド）。
+ */
+function buildAiTextPayload(inputText) {
+  return assembleConsultationSendText(inputText);
 }
 
-function toRelative(box, imageWidth, imageHeight) {
-  if (!imageWidth || !imageHeight) return undefined;
-  return {
-    left: clamp01(box.x / imageWidth),
-    top: clamp01(box.y / imageHeight),
-    right: clamp01((box.x + box.width) / imageWidth),
-    bottom: clamp01((box.y + box.height) / imageHeight),
+// 1) 確認画面で削除した文字は AI payload に残らない
+{
+  const editedOnConfirm = '通知を許可しますか？\nアカウントを削除';
+  let state = createEmptyOcrInputState();
+  state = applyOcrConfirmation(state, editedOnConfirm);
+  const payload = buildAiTextPayload(state.inputText);
+  assert.equal(payload, editedOnConfirm);
+  assert.doesNotMatch(payload, /削除されるべき秘密の行/);
+  assert.ok(consultationPayloadLooksSafe(payload));
+}
+
+// 2) 確認後に相談欄を編集 → 編集後の内容だけ送る（古い OCR 文が残らない）
+{
+  let state = createEmptyOcrInputState();
+  state = applyOcrConfirmation(state, '許可しますか？\n余計な行');
+  state = {
+    ...state,
+    inputText: '許可しますか？\n自分で直した文',
   };
+  const payload = buildAiTextPayload(state.inputText);
+  assert.equal(payload, '許可しますか？\n自分で直した文');
+  assert.doesNotMatch(payload, /余計な行/);
+  assert.equal(assembleConsultationSendText(state.inputText), payload);
 }
 
-function buildLayoutHints(lines, maxLines = 12) {
-  return lines
-    .slice(0, maxLines)
-    .map((line) => {
-      const top = line.bounds?.top;
-      let place = '位置不明';
-      if (typeof top === 'number') {
-        if (top < 0.33) place = '画面の上のほう';
-        else if (top < 0.66) place = '画面のまん中あたり';
-        else place = '画面の下のほう';
-      }
-      return `・${place}: ${line.text}`;
-    })
-    .join('\n');
+// 3) 読み取りキャンセル：OCR 由来テキストは送られない／利用者独自文は残る
+{
+  let state = createEmptyOcrInputState('LINEがおかしい');
+  state = applyOcrConfirmation(state, '通知を許可しますか？');
+  assert.match(state.inputText, /LINEがおかしい/);
+  assert.match(state.inputText, /通知を許可しますか？/);
+
+  state = clearOcrAutofill(state);
+  const payload = buildAiTextPayload(state.inputText);
+  assert.equal(payload, 'LINEがおかしい');
+  assert.doesNotMatch(payload, /通知を許可しますか？/);
 }
 
-function buildConsultationTextFromConfirmedOcr({
-  confirmedText,
-  layoutHints,
-  userNote,
-}) {
-  const parts = [];
-  const confirmed = confirmedText.trim();
-  if (confirmed) {
-    parts.push(
-      `【画面から読み取った文字（利用者が確認済み）】\n${confirmed}`,
-    );
-  }
-  const hints = layoutHints?.trim();
-  if (hints) parts.push(`【文字の位置の目安】\n${hints}`);
-  const note = userNote?.trim();
-  if (note) parts.push(`【利用者の補足】\n${note}`);
-  return parts.join('\n\n');
+// 3b) 入力が空の状態で OCR → キャンセル：OCR 文は消える
+{
+  let state = createEmptyOcrInputState();
+  state = applyOcrConfirmation(state, '画面の文字');
+  state = clearOcrAutofill(state);
+  assert.equal(buildAiTextPayload(state.inputText), '');
 }
 
-const bounds = toRelative({ x: 10, y: 20, width: 100, height: 40 }, 200, 400);
-assert.deepEqual(bounds, {
-  left: 0.05,
-  top: 0.05,
-  right: 0.55,
-  bottom: 0.15,
-});
+// 4) 画像 URI / Base64 が payload に混ざらない
+{
+  let state = createEmptyOcrInputState();
+  state = applyOcrConfirmation(state, 'こんにちは');
+  const payload = buildAiTextPayload(state.inputText);
+  assert.ok(consultationPayloadLooksSafe(payload));
+  assert.doesNotMatch(payload, /file:\/\/|data:image|base64,|content:\/\/|ph:\/\//i);
 
-const hints = buildLayoutHints([
-  { text: '設定', bounds: { top: 0.1 } },
-  { text: '許可しますか？', bounds: { top: 0.5 } },
-]);
-assert.match(hints, /画面の上のほう: 設定/);
-assert.match(hints, /画面のまん中あたり: 許可しますか？/);
+  assert.equal(
+    consultationPayloadLooksSafe('x file:///tmp/shot.png'),
+    false,
+  );
+  assert.equal(
+    consultationPayloadLooksSafe('data:image/png;base64,AAAA'),
+    false,
+  );
+}
 
-const merged = buildConsultationTextFromConfirmedOcr({
-  confirmedText: '通知を許可しますか？',
-  layoutHints: hints,
-  userNote: 'これが怖いです',
-});
-assert.match(merged, /利用者が確認済み/);
-assert.match(merged, /通知を許可しますか？/);
-assert.match(merged, /利用者の補足/);
-assert.doesNotMatch(merged, /file:\/\/|data:image|base64/i);
+// 5) 組み立て結果は利用者の最終確認内容と一致する
+{
+  const finalText = '写真へのアクセスを許可しますか？';
+  let state = createEmptyOcrInputState();
+  state = applyOcrConfirmation(state, finalText);
+  assert.equal(buildAiTextPayload(state.inputText), finalText);
+  assert.equal(assembleConsultationSendText.length, 1);
+}
 
 // Package wiring
 const pkg = require('../package.json');
@@ -141,7 +166,8 @@ assert.ok(
 );
 
 console.log('smoke-ocr-phase4: ok');
-console.log('- AI / Functions paths do not accept image bytes');
-console.log('- Local module uses JapaneseTextRecognizerOptions (ML Kit v2)');
-console.log('- Android stub refuses instead of faking success');
-console.log('- Confirmed OCR text builder never embeds file/base64 URIs');
+console.log('- Real consultationText path: deleted confirm-screen text absent');
+console.log('- Post-confirm edits: only edited content sent');
+console.log('- Cancel OCR: OCR-derived text cleared; user text kept');
+console.log('- No image URI/Base64 in payload');
+console.log('- Assembled send text matches user-finalized content');

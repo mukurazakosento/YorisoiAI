@@ -22,7 +22,13 @@ import {
   requestConsultation,
   type ConsultHistoryTurn,
 } from '../services/ai';
-import { buildConsultationTextFromConfirmedOcr } from '../services/ocr';
+import {
+  applyOcrConfirmation,
+  assembleConsultationSendText,
+  clearOcrAutofill,
+  createEmptyOcrInputState,
+  type OcrInputState,
+} from '../services/ocr/consultationText';
 import type { AiResponse } from '../types/ai';
 import type { ConsultationChoice } from '../types/consultation';
 import type { RootStackParamList } from '../types/navigation';
@@ -43,32 +49,34 @@ export function ConsultationScreen({ navigation, route }: Props) {
   const connection = useMemo(() => getAiConnectionBanner(), []);
   const { fontSize } = useSettings();
 
-  const [inputText, setInputText] = useState('');
+  const [ocrInput, setOcrInput] = useState<OcrInputState>(
+    createEmptyOcrInputState(),
+  );
   const [choices, setChoices] = useState<ConsultationChoice[]>(initialChoices);
   const [choicesAreDynamic, setChoicesAreDynamic] = useState(false);
   const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(null);
   const [lastResponse, setLastResponse] = useState<AiResponse | null>(null);
   const [history, setHistory] = useState<ConsultHistoryTurn[]>([]);
   const [busy, setBusy] = useState(false);
-  const [confirmedOcr, setConfirmedOcr] = useState<ConfirmedOcrPayload | null>(
-    null,
-  );
+
+  const inputText = ocrInput.inputText;
 
   const canStart =
-    inputText.trim().length > 0 ||
-    selectedChoiceId !== null ||
-    Boolean(confirmedOcr?.text.trim());
+    assembleConsultationSendText(inputText).length > 0 ||
+    selectedChoiceId !== null;
 
   const handleOcrConfirmed = (payload: ConfirmedOcrPayload) => {
-    setConfirmedOcr(payload);
-    // 確認済みテキストを入力欄にも反映（利用者がさらに直せる）
-    if (!inputText.trim()) {
-      setInputText(payload.text);
-    }
+    // 確認・編集済みテキストだけを入力欄へ。生の OCR 結果は受け取らない。
+    setOcrInput((prev) => applyOcrConfirmation(prev, payload.text));
   };
 
   const handleOcrCleared = () => {
-    setConfirmedOcr(null);
+    // OCR 自動投入分だけ消し、利用者が別に書いた文は残す
+    setOcrInput((prev) => clearOcrAutofill(prev));
+  };
+
+  const handleInputChange = (text: string) => {
+    setOcrInput((prev) => ({ ...prev, inputText: text }));
   };
 
   const handleStart = async () => {
@@ -85,22 +93,9 @@ export function ConsultationScreen({ navigation, route }: Props) {
       return;
     }
 
-    const userText = inputText.trim();
-    // 確認済み OCR テキストのみ織り込む。画像 URI / Base64 は絶対に含めない。
-    const textForAi = confirmedOcr
-      ? buildConsultationTextFromConfirmedOcr({
-          confirmedText: confirmedOcr.text,
-          layoutHints: confirmedOcr.layoutHints,
-          userNote:
-            userText && userText !== confirmedOcr.text.trim()
-              ? userText
-              : undefined,
-        })
-      : userText;
-
-    const userSummary = [choiceLabel, textForAi || userText]
-      .filter(Boolean)
-      .join(' / ');
+    // 実送信パス：入力欄の最終文字列のみ（OCR 生データ・位置ヒント・画像なし）
+    const textForAi = assembleConsultationSendText(inputText);
+    const userSummary = [choiceLabel, textForAi].filter(Boolean).join(' / ');
 
     setBusy(true);
     try {
@@ -114,7 +109,7 @@ export function ConsultationScreen({ navigation, route }: Props) {
       setLastResponse(response);
       setHistory((prev) => [
         ...prev,
-        { role: 'user', text: userSummary || userText || choiceLabel || '' },
+        { role: 'user', text: userSummary || textForAi || choiceLabel || '' },
         {
           role: 'assistant',
           text:
@@ -129,7 +124,7 @@ export function ConsultationScreen({ navigation, route }: Props) {
         setChoices(toChoiceItems(response.choices));
         setChoicesAreDynamic(true);
         setSelectedChoiceId(null);
-        setInputText('');
+        setOcrInput(createEmptyOcrInputState());
       }
     } finally {
       setBusy(false);
@@ -142,8 +137,7 @@ export function ConsultationScreen({ navigation, route }: Props) {
     setSelectedChoiceId(null);
     setLastResponse(null);
     setHistory([]);
-    setInputText('');
-    setConfirmedOcr(null);
+    setOcrInput(createEmptyOcrInputState());
   };
 
   const resultBody = buildResultBody(lastResponse);
@@ -174,7 +168,7 @@ export function ConsultationScreen({ navigation, route }: Props) {
       <TextInputField
         label="困っていること"
         value={inputText}
-        onChangeText={setInputText}
+        onChangeText={handleInputChange}
         placeholder="例：LINEの通知が来ない"
       />
 
@@ -278,7 +272,6 @@ function buildResultBody(response: AiResponse | null): string | null {
     return '返事を表示できませんでした。もう一度お試しください。';
   }
 
-  // 重複を避けつつ読み順を保つ
   const unique: string[] = [];
   for (const part of parts) {
     if (!unique.includes(part)) {

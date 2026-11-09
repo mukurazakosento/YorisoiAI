@@ -13,6 +13,13 @@ import {
 } from 'yorisoi-mlkit-ocr';
 
 import { deleteTempImageUri } from './cleanup';
+import {
+  applyOcrConfirmation,
+  assembleConsultationSendText,
+  clearOcrAutofill,
+  consultationPayloadLooksSafe,
+  createEmptyOcrInputState,
+} from './consultationText';
 import { pickScreenshotFromLibrary } from './imagePicker';
 import { buildLayoutHints, mapNativeOcrResult } from './mapResult';
 import type {
@@ -32,8 +39,15 @@ export type {
   RelativeBounds,
 } from './types';
 
+export type { OcrInputState } from './consultationText';
+
 export {
+  applyOcrConfirmation,
+  assembleConsultationSendText,
   buildLayoutHints,
+  clearOcrAutofill,
+  consultationPayloadLooksSafe,
+  createEmptyOcrInputState,
   deleteTempImageUri,
   pickScreenshotFromLibrary,
   OcrNativeUnavailableError,
@@ -153,31 +167,4 @@ export async function recognizePickedScreenshot(
 
     return { status: 'error', message };
   }
-}
-
-/**
- * 確認済み OCR テキストだけを相談用テキストへ織り込む。
- * 画像 URI / Base64 は絶対に含めない。
- */
-export function buildConsultationTextFromConfirmedOcr(options: {
-  confirmedText: string;
-  layoutHints?: string;
-  userNote?: string;
-}): string {
-  const parts: string[] = [];
-  const confirmed = options.confirmedText.trim();
-  if (confirmed) {
-    parts.push(
-      `【画面から読み取った文字（利用者が確認済み）】\n${confirmed}`,
-    );
-  }
-  const hints = options.layoutHints?.trim();
-  if (hints) {
-    parts.push(`【文字の位置の目安】\n${hints}`);
-  }
-  const note = options.userNote?.trim();
-  if (note) {
-    parts.push(`【利用者の補足】\n${note}`);
-  }
-  return parts.join('\n\n');
 }
