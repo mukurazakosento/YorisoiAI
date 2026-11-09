@@ -47,6 +47,8 @@ export const ConsultFeatureIdSchema = z.enum([
   'safetyCheck',
 ]);
 
+export const GuidanceActionSchema = z.enum(['start', 'done', 'simplify']);
+
 export const ConsultRequestSchema = z.object({
   featureId: ConsultFeatureIdSchema,
   text: z.string().default(''),
@@ -59,6 +61,8 @@ export const ConsultRequestSchema = z.object({
       }),
     )
     .optional(),
+  /** 操作支援の1ステップ案内。replay（もう一度聞く）は端末側のみ。 */
+  guidanceAction: GuidanceActionSchema.optional(),
 });
 
 export type ConsultRequest = z.infer<typeof ConsultRequestSchema>;

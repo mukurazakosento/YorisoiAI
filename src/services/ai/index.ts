@@ -2,26 +2,16 @@ import { httpsCallable } from 'firebase/functions';
 
 import { appConfig } from '../../constants/config';
 import type { AiResponse } from '../../types/ai';
-import type { FeatureId } from '../../types/navigation';
 import {
   getFirebaseFunctions,
   isFirebaseConfigured,
 } from '../firebase';
 import { buildDemoConsultationResponse } from './demoFallback';
+import { formatGuidanceHistoryText } from './guidanceDemo';
 import { validateAiResponse } from './schema';
+import type { ConsultRequest, GuidanceAction } from './types';
 
-export type ConsultHistoryTurn = {
-  role: 'user' | 'assistant';
-  text: string;
-};
-
-export type ConsultRequest = {
-  featureId: FeatureId;
-  text: string;
-  choiceLabel?: string;
-  history?: ConsultHistoryTurn[];
-};
-
+export type { ConsultHistoryTurn, ConsultRequest, GuidanceAction } from './types';
 export type ConsultResult = AiResponse & {
   /** live=Functions経由 / demo=明示デモ / offline=未接続フォールバック */
   connection: 'live' | 'demo' | 'offline';
@@ -32,6 +22,7 @@ export type ConsultResult = AiResponse & {
  * - Firebase 未設定 → 「AI未接続」デモ（ライブのふりをしない）
  * - 設定あり → Cloud Functions `consultWithAi` を呼ぶ
  * - 応答は Zod で検証し、壊れた JSON でも落とさない
+ * - 操作支援の guidanceAction で1ステップ案内を進める
  */
 export async function requestConsultation(
   request: ConsultRequest,
@@ -64,6 +55,7 @@ export async function requestConsultation(
       text: request.text,
       choiceLabel: request.choiceLabel,
       history: request.history,
+      guidanceAction: request.guidanceAction,
     });
 
     const validated = validateAiResponse(result.data);
@@ -101,5 +93,22 @@ export function getAiConnectionBanner(): {
   };
 }
 
+export function buildAssistantHistoryText(response: AiResponse): string {
+  if (response.status === 'guiding') {
+    return formatGuidanceHistoryText(response);
+  }
+  return (
+    response.message ??
+    response.displayText ??
+    response.question ??
+    ''
+  );
+}
+
 export { buildDemoConsultationResponse } from './demoFallback';
-export { validateAiResponse, parseAiResponseText } from './schema';
+export {
+  buildDemoGuidanceResponse,
+  formatGuidanceHistoryText,
+  shouldOfferGuidanceStart,
+} from './guidanceDemo';
+export { validateAiResponse, parseAiResponseText, normalizeGuidanceFields } from './schema';

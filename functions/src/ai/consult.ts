@@ -26,7 +26,7 @@ export const geminiChatModel = defineString('GEMINI_MODEL_DEFAULT', {
 
 /**
  * 相談 Callable（Functions v2）。
- * 画像は受け取らない。テキスト相談と動的選択肢のみ。
+ * 画像は受け取らない。テキスト相談・動的選択肢・操作支援の1ステップ案内。
  */
 export const consultWithAi = onCall(
   {
