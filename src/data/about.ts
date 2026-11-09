@@ -2,7 +2,8 @@ import { appConfig } from '../constants/config';
 
 export const ABOUT_TEXT = [
   `${appConfig.appName}は、スマートフォンの操作や画面の文章、不審な連絡について、落ち着いて確認できるように支えるアプリです。`,
-  'いまの版では画面の移動、設定の保存、AI相談、端末内の文字認識（OCR）までが使えます。音声案内はこれからつなぎます。',
+  'いまの版では画面の移動、設定の保存、AI相談、端末内の文字認識（OCR）、操作支援の1ステップ案内までが使えます。',
+  '音声は案内の読み上げを軽くつないでいます（停止・再開などの本格操作はこれから整えます）。',
   '文字認識は Expo Go では使えません。iPhone の development build（EAS）が必要です。',
   `バージョン: ${appConfig.appVersion}`,
 ].join('\n\n');

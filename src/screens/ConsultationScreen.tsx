@@ -1,9 +1,10 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { AppHeader } from '../components/AppHeader';
 import { ChoiceButton } from '../components/ChoiceButton';
+import { GuidanceStepPanel } from '../components/GuidanceStepPanel';
 import { InfoCard } from '../components/InfoCard';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { Screen } from '../components/Screen';
@@ -18,9 +19,12 @@ import { baseFontSizes } from '../constants/typography';
 import { INITIAL_CHOICES } from '../data/initialChoices';
 import { useSettings } from '../hooks/useSettings';
 import {
+  buildAssistantHistoryText,
   getAiConnectionBanner,
   requestConsultation,
+  shouldOfferGuidanceStart,
   type ConsultHistoryTurn,
+  type GuidanceAction,
 } from '../services/ai';
 import {
   applyOcrConfirmation,
@@ -29,6 +33,7 @@ import {
   createEmptyOcrInputState,
   type OcrInputState,
 } from '../services/ocr/consultationText';
+import { speak, stopSpeaking } from '../services/speech';
 import type { AiResponse } from '../types/ai';
 import type { ConsultationChoice } from '../types/consultation';
 import type { RootStackParamList } from '../types/navigation';
@@ -46,8 +51,8 @@ export function ConsultationScreen({ navigation, route }: Props) {
   const { featureId } = route.params;
   const feature = getFeatureById(featureId);
   const initialChoices = useMemo(() => INITIAL_CHOICES[featureId], [featureId]);
-  const connection = useMemo(() => getAiConnectionBanner(), []);
-  const { fontSize } = useSettings();
+  const localConnection = useMemo(() => getAiConnectionBanner(), []);
+  const { fontSize, settings } = useSettings();
 
   const [ocrInput, setOcrInput] = useState<OcrInputState>(
     createEmptyOcrInputState(),
@@ -60,10 +65,71 @@ export function ConsultationScreen({ navigation, route }: Props) {
   const [busy, setBusy] = useState(false);
 
   const inputText = ocrInput.inputText;
+  const isGuiding = lastResponse?.status === 'guiding';
+  const canOfferStart =
+    lastResponse !== null && shouldOfferGuidanceStart(featureId, lastResponse);
+
+  // Firebase 公開設定があっても Gemini 未設定（mode=offline）なら接続済みと出さない
+  const connection = useMemo(() => {
+    if (lastResponse?.mode === 'offline') {
+      return {
+        connected: false,
+        message:
+          lastResponse.message?.trim() ||
+          'AI未接続です。基本の選択肢をご利用ください',
+      };
+    }
+    return localConnection;
+  }, [lastResponse, localConnection]);
 
   const canStart =
     assembleConsultationSendText(inputText).length > 0 ||
     selectedChoiceId !== null;
+
+  useEffect(() => {
+    return () => {
+      void stopSpeaking();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isGuiding || !lastResponse?.voiceText) {
+      return;
+    }
+    if (!settings.voiceEnabled) {
+      return;
+    }
+    void speak({
+      text: lastResponse.voiceText,
+      rate: settings.speechRate,
+      language: 'ja-JP',
+    }).catch(() => {
+      // Phase 5: 音声失敗でも画面案内は続ける
+    });
+  }, [
+    isGuiding,
+    lastResponse?.currentStep,
+    lastResponse?.displayText,
+    lastResponse?.voiceText,
+    lastResponse?.question,
+    settings.voiceEnabled,
+    settings.speechRate,
+  ]);
+
+  const playVoice = async (voiceText: string) => {
+    if (!settings.voiceEnabled) {
+      return;
+    }
+    try {
+      await speak({
+        text: voiceText,
+        rate: settings.speechRate,
+        language: 'ja-JP',
+      });
+    } catch {
+      // Phase 5: 音声失敗でも画面案内は続ける
+    }
+  };
 
   const handleOcrConfirmed = (payload: ConfirmedOcrPayload) => {
     // 確認・編集済みテキストだけを入力欄へ。生の OCR 結果は受け取らない。
@@ -77,6 +143,33 @@ export function ConsultationScreen({ navigation, route }: Props) {
 
   const handleInputChange = (text: string) => {
     setOcrInput((prev) => ({ ...prev, inputText: text }));
+  };
+
+  const applyResponse = (
+    response: AiResponse,
+    userSummary: string,
+  ) => {
+    setLastResponse(response);
+    setHistory((prev) => [
+      ...prev,
+      { role: 'user', text: userSummary },
+      {
+        role: 'assistant',
+        text: buildAssistantHistoryText(response),
+      },
+    ]);
+
+    if (response.status === 'guiding') {
+      setSelectedChoiceId(null);
+      return;
+    }
+
+    if (response.choices && response.choices.length > 0) {
+      setChoices(toChoiceItems(response.choices));
+      setChoicesAreDynamic(true);
+      setSelectedChoiceId(null);
+      setOcrInput(createEmptyOcrInputState());
+    }
   };
 
   const handleStart = async () => {
@@ -93,6 +186,8 @@ export function ConsultationScreen({ navigation, route }: Props) {
       return;
     }
 
+    const guidanceAction = resolveChoiceGuidanceAction(choiceLabel);
+
     // 実送信パス：入力欄の最終文字列のみ（OCR 生データ・位置ヒント・画像なし）
     const textForAi = assembleConsultationSendText(inputText);
     const userSummary = [choiceLabel, textForAi].filter(Boolean).join(' / ');
@@ -104,34 +199,78 @@ export function ConsultationScreen({ navigation, route }: Props) {
         text: textForAi,
         choiceLabel,
         history,
+        guidanceAction,
       });
+      applyResponse(response, userSummary || textForAi || choiceLabel || '');
+    } finally {
+      setBusy(false);
+    }
+  };
 
-      setLastResponse(response);
-      setHistory((prev) => [
-        ...prev,
-        { role: 'user', text: userSummary || textForAi || choiceLabel || '' },
-        {
-          role: 'assistant',
-          text:
-            response.message ??
-            response.displayText ??
-            response.question ??
-            '',
-        },
-      ]);
+  const handleGuidanceAction = async (action: GuidanceAction) => {
+    if (busy || !isGuiding) {
+      return;
+    }
 
-      if (response.choices && response.choices.length > 0) {
-        setChoices(toChoiceItems(response.choices));
-        setChoicesAreDynamic(true);
-        setSelectedChoiceId(null);
-        setOcrInput(createEmptyOcrInputState());
+    // 確認済み OCR テキストがあれば次ステップの文脈として送る（画像・生OCR・位置ヒントは送らない）
+    const screenContext = assembleConsultationSendText(inputText);
+    const label =
+      action === 'done'
+        ? 'できました'
+        : action === 'simplify'
+          ? '分かりません'
+          : '案内を始める';
+
+    setBusy(true);
+    try {
+      const response = await requestConsultation({
+        featureId,
+        text: screenContext,
+        choiceLabel: label,
+        history,
+        guidanceAction: action,
+      });
+      applyResponse(
+        response,
+        screenContext ? `${label} / ${screenContext}` : label,
+      );
+      if (action === 'done' || action === 'simplify') {
+        // 次の案内用に OCR 自動投入はクリア（利用者の独自文は clear しない）
+        setOcrInput((prev) => clearOcrAutofill(prev));
       }
     } finally {
       setBusy(false);
     }
   };
 
+  const handleReplay = () => {
+    if (!lastResponse?.voiceText && !lastResponse?.displayText) {
+      return;
+    }
+    void playVoice(lastResponse.voiceText || lastResponse.displayText || '');
+  };
+
+  const handleStartGuidance = async () => {
+    if (busy) {
+      return;
+    }
+    setBusy(true);
+    try {
+      const response = await requestConsultation({
+        featureId,
+        text: '',
+        choiceLabel: '案内を始める',
+        history,
+        guidanceAction: 'start',
+      });
+      applyResponse(response, '案内を始める');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleResetChoices = () => {
+    void stopSpeaking();
     setChoices(initialChoices);
     setChoicesAreDynamic(false);
     setSelectedChoiceId(null);
@@ -153,9 +292,11 @@ export function ConsultationScreen({ navigation, route }: Props) {
       />
 
       <Text style={[styles.lead, { fontSize: fontSize(baseFontSizes.body) }]}>
-        {showScreenshotHint
-          ? '文章を書くか、スクリーンショットから文字を取り込むか、下の選択肢を押してください。'
-          : '文章を書くか、下の選択肢を押してください。スクリーンショットからも文字を取り込めます。'}
+        {isGuiding
+          ? '次の操作を一つだけ行ってください。画面の文字を取り込むこともできます。'
+          : showScreenshotHint
+            ? '文章を書くか、スクリーンショットから文字を取り込むか、下の選択肢を押してください。'
+            : '文章を書くか、下の選択肢を押してください。スクリーンショットからも文字を取り込めます。'}
       </Text>
 
       <InfoCard message={connection.message} />
@@ -165,95 +306,155 @@ export function ConsultationScreen({ navigation, route }: Props) {
         onCleared={handleOcrCleared}
       />
 
-      <TextInputField
-        label="困っていること"
-        value={inputText}
-        onChangeText={handleInputChange}
-        placeholder="例：LINEの通知が来ない"
-      />
-
-      <View style={styles.choicesHeader}>
-        <Text
-          style={[styles.sectionTitle, { fontSize: fontSize(baseFontSizes.bodyLarge) }]}
-        >
-          {choicesAreDynamic ? 'おすすめの選択肢' : 'よくある相談'}
-        </Text>
-        <Text
-          style={[styles.sectionHint, { fontSize: fontSize(baseFontSizes.caption) }]}
-        >
-          {choicesAreDynamic
-            ? '内容に合わせて選択肢が変わりました。'
-            : connection.connected
-              ? '相談を送ると、内容に合わせて選択肢が変わります。'
-              : 'AI未接続のため、基本の選択肢を表示しています。'}
-        </Text>
-      </View>
-
-      <View style={styles.choices}>
-        {choices.map((choice) => (
-          <ChoiceButton
-            key={choice.id}
-            label={choice.label}
-            selected={selectedChoiceId === choice.id}
-            onPress={() => setSelectedChoiceId(choice.id)}
+      {isGuiding && lastResponse ? (
+        <>
+          <TextInputField
+            label="画面から読み取った文字（任意）"
+            value={inputText}
+            onChangeText={handleInputChange}
+            placeholder="確認した文字があれば残せます（画像は送りません）"
           />
-        ))}
-      </View>
+          <GuidanceStepPanel
+            response={lastResponse}
+            busy={busy}
+            onDone={() => {
+              void handleGuidanceAction('done');
+            }}
+            onReplay={handleReplay}
+            onSimplify={() => {
+              void handleGuidanceAction('simplify');
+            }}
+            onExit={handleResetChoices}
+          />
+        </>
+      ) : (
+        <>
+          <TextInputField
+            label="困っていること"
+            value={inputText}
+            onChangeText={handleInputChange}
+            placeholder="例：LINEの通知が来ない"
+          />
 
-      <PrimaryButton
-        label={busy ? '考えています…' : 'この内容で進む'}
-        onPress={() => {
-          void handleStart();
-        }}
-        disabled={!canStart || busy}
-      />
-
-      {choicesAreDynamic ? (
-        <PrimaryButton
-          label="最初の選択肢に戻る"
-          variant="secondary"
-          onPress={handleResetChoices}
-          disabled={busy}
-        />
-      ) : null}
-
-      {resultBody ? (
-        <View style={styles.result}>
-          {lastResponse?.mode === 'demo' || lastResponse?.mode === 'offline' ? (
+          <View style={styles.choicesHeader}>
             <Text
               style={[
-                styles.modeLabel,
+                styles.sectionTitle,
+                { fontSize: fontSize(baseFontSizes.bodyLarge) },
+              ]}
+            >
+              {choicesAreDynamic ? 'おすすめの選択肢' : 'よくある相談'}
+            </Text>
+            <Text
+              style={[
+                styles.sectionHint,
                 { fontSize: fontSize(baseFontSizes.caption) },
               ]}
             >
-              {lastResponse.mode === 'demo' ? 'デモ案内' : 'AI未接続'}
+              {choicesAreDynamic
+                ? '内容に合わせて選択肢が変わりました。'
+                : connection.connected
+                  ? '相談を送ると、内容に合わせて選択肢が変わります。'
+                  : 'AI未接続のため、基本の選択肢を表示しています。'}
             </Text>
+          </View>
+
+          <View style={styles.choices}>
+            {choices.map((choice) => (
+              <ChoiceButton
+                key={choice.id}
+                label={choice.label}
+                selected={selectedChoiceId === choice.id}
+                onPress={() => setSelectedChoiceId(choice.id)}
+              />
+            ))}
+          </View>
+
+          <PrimaryButton
+            label={busy ? '考えています…' : 'この内容で進む'}
+            onPress={() => {
+              void handleStart();
+            }}
+            disabled={!canStart || busy}
+          />
+
+          {canOfferStart ? (
+            <PrimaryButton
+              label={busy ? '考えています…' : '案内を始める'}
+              onPress={() => {
+                void handleStartGuidance();
+              }}
+              disabled={busy}
+            />
           ) : null}
-          <Text
-            style={[styles.resultText, { fontSize: fontSize(baseFontSizes.body) }]}
-          >
-            {resultBody}
-          </Text>
-          {lastResponse?.recommendedActions &&
-          lastResponse.recommendedActions.length > 0 ? (
-            <View style={styles.actions}>
-              {lastResponse.recommendedActions.map((action) => (
+
+          {choicesAreDynamic ? (
+            <PrimaryButton
+              label="最初の選択肢に戻る"
+              variant="secondary"
+              onPress={handleResetChoices}
+              disabled={busy}
+            />
+          ) : null}
+
+          {resultBody ? (
+            <View style={styles.result}>
+              {lastResponse?.mode === 'demo' ||
+              lastResponse?.mode === 'offline' ? (
                 <Text
-                  key={action}
                   style={[
-                    styles.actionItem,
-                    { fontSize: fontSize(baseFontSizes.body) },
+                    styles.modeLabel,
+                    { fontSize: fontSize(baseFontSizes.caption) },
                   ]}
                 >
-                  ・{action}
+                  {lastResponse.mode === 'demo' ? 'デモ案内' : 'AI未接続'}
                 </Text>
-              ))}
+              ) : null}
+              <Text
+                style={[
+                  styles.resultText,
+                  { fontSize: fontSize(baseFontSizes.body) },
+                ]}
+              >
+                {resultBody}
+              </Text>
+              {lastResponse?.recommendedActions &&
+              lastResponse.recommendedActions.length > 0 ? (
+                <View style={styles.actions}>
+                  {lastResponse.recommendedActions.map((action) => (
+                    <Text
+                      key={action}
+                      style={[
+                        styles.actionItem,
+                        { fontSize: fontSize(baseFontSizes.body) },
+                      ]}
+                    >
+                      ・{action}
+                    </Text>
+                  ))}
+                </View>
+              ) : null}
             </View>
           ) : null}
-        </View>
-      ) : null}
+        </>
+      )}
     </Screen>
   );
+}
+
+function resolveChoiceGuidanceAction(
+  choiceLabel: string | undefined,
+): GuidanceAction | undefined {
+  if (!choiceLabel) {
+    return undefined;
+  }
+  if (
+    choiceLabel === '案内を始める' ||
+    choiceLabel === 'もう一度最初から案内する'
+  ) {
+    return 'start';
+  }
+  return undefined;
 }
 
 function buildResultBody(response: AiResponse | null): string | null {
@@ -261,11 +462,15 @@ function buildResultBody(response: AiResponse | null): string | null {
     return null;
   }
 
+  // guiding は専用パネルで表示する
+  if (response.status === 'guiding') {
+    return null;
+  }
+
   const parts = [
     response.displayText,
     response.message,
     response.question,
-    response.voiceText ? `（音声用）${response.voiceText}` : undefined,
   ].filter((part): part is string => Boolean(part && part.trim()));
 
   if (parts.length === 0) {

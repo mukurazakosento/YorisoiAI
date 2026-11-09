@@ -28,7 +28,7 @@ export function SettingsScreen({ navigation }: Props) {
 
       <SettingOptionRow
         title="音声案内"
-        description="オンにすると、案内を声で読めます（音声機能はこれからつなぎます）。"
+        description="オンにすると、操作案内などを声で読みます。"
         options={[
           { label: 'オン', value: true },
           { label: 'オフ', value: false },

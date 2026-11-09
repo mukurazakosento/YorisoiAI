@@ -13,6 +13,10 @@ import {
   DEFAULT_CHAT_MODEL_ID,
   resolveChatModelId,
 } from '../shared/models';
+import {
+  hasGeminiApiKey,
+  responseWhenGeminiKeyMissing,
+} from './geminiKey';
 import { buildSystemInstruction, buildUserPrompt } from './prompts';
 
 /** Secret Manager 上の Gemini API キー（アプリには置かない） */
@@ -26,7 +30,8 @@ export const geminiChatModel = defineString('GEMINI_MODEL_DEFAULT', {
 
 /**
  * 相談 Callable（Functions v2）。
- * 画像は受け取らない。テキスト相談と動的選択肢のみ。
+ * 画像は受け取らない。テキスト相談・動的選択肢・操作支援の1ステップ案内。
+ * GEMINI_API_KEY 未設定時は mode=offline（Firebase が生きていても live としない）。
  */
 export const consultWithAi = onCall(
   {
@@ -45,14 +50,9 @@ export const consultWithAi = onCall(
     }
 
     const apiKey = geminiApiKey.value();
-    if (!apiKey) {
+    if (!hasGeminiApiKey(apiKey)) {
       logger.error('GEMINI_API_KEY secret is empty');
-      return {
-        status: 'error',
-        message:
-          'AIの鍵がサーバーに設定されていません。管理者に連絡してください。',
-        mode: 'live',
-      };
+      return responseWhenGeminiKeyMissing();
     }
 
     const modelId = resolveChatModelId(geminiChatModel.value());

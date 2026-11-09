@@ -1,10 +1,17 @@
 import type { AiResponse } from '../../types/ai';
 import type { FeatureId } from '../../types/navigation';
+import {
+  buildDemoGuidanceResponse,
+  type GuidanceDemoInput,
+} from './guidanceDemo';
+import type { ConsultHistoryTurn, GuidanceAction } from './types';
 
 export type DemoConsultInput = {
   featureId: FeatureId;
   text: string;
   choiceLabel?: string;
+  history?: ConsultHistoryTurn[];
+  guidanceAction?: GuidanceAction;
 };
 
 const DEMO_PREFIX = '【デモ・AI未接続】';
@@ -12,10 +19,25 @@ const DEMO_PREFIX = '【デモ・AI未接続】';
 /**
  * Firebase / Gemini 未設定時の明示デモ応答。
  * ライブ AI のふりをせず、ラベル付きのフォールバック選択肢を返す。
+ * 操作支援で問題が特定できたら 1 ステップ案内へ進む。
  */
 export function buildDemoConsultationResponse(
   input: DemoConsultInput,
 ): AiResponse {
+  const guidanceInput: GuidanceDemoInput = {
+    featureId: input.featureId,
+    text: input.text,
+    choiceLabel: input.choiceLabel,
+    history: input.history,
+    guidanceAction: input.guidanceAction,
+  };
+
+  // 案内中のアクション、または具体問題の自動開始
+  const guidance = buildDemoGuidanceResponse(guidanceInput);
+  if (guidance) {
+    return guidance;
+  }
+
   const combined = `${input.choiceLabel ?? ''} ${input.text}`.trim();
   const normalized = combined.replace(/\s+/g, '');
 
@@ -38,7 +60,7 @@ export function buildDemoConsultationResponse(
     };
   }
 
-  if (isLineTrouble(normalized)) {
+  if (isLineTrouble(normalized) && !isConcreteLineIssue(normalized)) {
     return {
       status: 'need_more_info',
       mode: 'demo',
@@ -91,6 +113,23 @@ export function buildDemoConsultationResponse(
     };
   }
 
+  if (input.featureId === 'operationSupport' && combined.length > 0) {
+    return {
+      status: 'ready_to_help',
+      mode: 'demo',
+      message: `${DEMO_PREFIX} 「${truncate(combined, 40)}」という相談として受け取りました。下の「案内を始める」で、デモの1ステップ案内を試せます。`,
+      displayText: '案内の準備ができました。',
+      voiceText:
+        '相談内容を受け取りました。案内を始めるを押すと、操作を一つずつ案内します。本物のAIではありません。',
+      choices: [
+        '案内を始める',
+        'もう少し詳しく話す',
+        '別のことで相談する',
+        '最初の選択肢に戻る',
+      ],
+    };
+  }
+
   if (combined.length > 0) {
     return {
       status: 'ready_to_help',
@@ -125,6 +164,15 @@ function isLineTrouble(normalized: string): boolean {
     normalized.includes('LINE') ||
     normalized.includes('ライン') ||
     normalized.includes('らいん')
+  );
+}
+
+function isConcreteLineIssue(normalized: string): boolean {
+  return (
+    normalized.includes('通知') ||
+    normalized.includes('開かない') ||
+    normalized.includes('送れない') ||
+    normalized.includes('多すぎ')
   );
 }
 
