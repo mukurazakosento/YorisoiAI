@@ -1,22 +1,25 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { AppHeader } from '../components/AppHeader';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { Screen } from '../components/Screen';
 import { SettingOptionRow } from '../components/SettingOptionRow';
+import { colors } from '../constants/colors';
 import {
+  baseFontSizes,
   fontScaleLabels,
   type FontScaleKey,
 } from '../constants/typography';
 import { useSettings } from '../hooks/useSettings';
+import { SPEECH_MUTE_HELP, stopSpeaking } from '../services/speech';
 import { SPEECH_RATE_OPTIONS } from '../types/settings';
 import type { RootStackParamList } from '../types/navigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 
 export function SettingsScreen({ navigation }: Props) {
-  const { settings, updateSettings } = useSettings();
+  const { settings, updateSettings, fontSize } = useSettings();
 
   return (
     <Screen>
@@ -28,20 +31,28 @@ export function SettingsScreen({ navigation }: Props) {
 
       <SettingOptionRow
         title="音声案内"
-        description="オンにすると、操作案内などを声で読みます。"
+        description="オンにすると、操作案内・文章解説・安全性検査の詳しい説明を声で読みます。オフでも画面の文字は表示されます。"
         options={[
           { label: 'オン', value: true },
           { label: 'オフ', value: false },
         ]}
         selectedValue={settings.voiceEnabled}
         onSelect={(value) => {
-          void updateSettings({ voiceEnabled: Boolean(value) });
+          const enabled = Boolean(value);
+          if (!enabled) {
+            void stopSpeaking();
+          }
+          void updateSettings({ voiceEnabled: enabled });
         }}
       />
 
+      <Text style={[styles.muteHelp, { fontSize: fontSize(baseFontSizes.caption) }]}>
+        {SPEECH_MUTE_HELP}
+      </Text>
+
       <SettingOptionRow
         title="読み上げ速度"
-        description="ややゆっくりがおすすめです。"
+        description="最初は「ややゆっくり」です。聞き取りやすい速さに変えられます。"
         options={SPEECH_RATE_OPTIONS.map((option) => ({
           label: option.label,
           value: option.value,
@@ -82,6 +93,11 @@ export function SettingsScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
+  muteHelp: {
+    color: colors.textMuted,
+    lineHeight: 26,
+    marginTop: -4,
+  },
   links: {
     gap: 12,
     marginTop: 8,

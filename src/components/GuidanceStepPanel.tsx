@@ -6,25 +6,24 @@ import { baseFontSizes } from '../constants/typography';
 import { useSettings } from '../hooks/useSettings';
 import type { AiResponse } from '../types/ai';
 import { PrimaryButton } from './PrimaryButton';
+import { SpeechControls } from './SpeechControls';
 
 type GuidanceStepPanelProps = {
   response: AiResponse;
   busy?: boolean;
   onDone: () => void;
-  onReplay: () => void;
   onSimplify: () => void;
   onExit: () => void;
 };
 
 /**
  * 操作支援の1ステップ案内 UI。
- * 画面には短い displayText のみ。音声用 voiceText は別管理。
+ * 画面には短い displayText のみ。音声用 voiceText は別管理（SpeechControls）。
  */
 export function GuidanceStepPanel({
   response,
   busy = false,
   onDone,
-  onReplay,
   onSimplify,
   onExit,
 }: GuidanceStepPanelProps) {
@@ -78,16 +77,16 @@ export function GuidanceStepPanel({
         操作が終わったら下のボタンを押してください。一度に一つの操作だけ進めます。
       </Text>
 
+      <SpeechControls
+        voiceText={response.voiceText}
+        displayFallback={response.displayText}
+        disabled={busy}
+      />
+
       <View style={styles.buttons}>
         <PrimaryButton
           label={busy ? '考えています…' : 'できました'}
           onPress={onDone}
-          disabled={busy}
-        />
-        <PrimaryButton
-          label="もう一度聞く"
-          variant="secondary"
-          onPress={onReplay}
           disabled={busy}
         />
         <PrimaryButton
