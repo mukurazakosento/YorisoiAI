@@ -11,7 +11,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.yorisoi.ai",
       "infoPlist": {
-        "CFBundleDisplayName": "よりそいAI"
+        "CFBundleDisplayName": "よりそいAI",
+        "NSPhotoLibraryUsageDescription": "スクリーンショットの文字を端末の中だけで読み取るために、写真ライブラリへのアクセスが必要です。"
       }
     },
     "android": {
@@ -26,6 +27,24 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-dev-client",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "スクリーンショットの文字を端末の中だけで読み取るために、写真ライブラリへのアクセスが必要です。"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "16.4",
+            "useFrameworks": "static"
+          }
+        }
+      ]
+    ]
   }
 }

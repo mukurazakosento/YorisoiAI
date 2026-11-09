@@ -1,0 +1,20 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.yorisoimlkitocr'
+version = '0.1.0'
+
+android {
+  namespace "expo.modules.yorisoimlkitocr"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+  }
+}
+
+dependencies {
+  // Android Japanese ML Kit will be swapped in later.
+  // Stub module reports isAvailable()=false and never uploads images.
+}

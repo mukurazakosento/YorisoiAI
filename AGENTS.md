@@ -27,6 +27,9 @@
 ```bat
 npm run typecheck
 node scripts\smoke-ai-phase3.mjs
+node scripts\smoke-ocr-phase4.mjs
 cd functions && npm run typecheck
 npx expo start
 ```
+
+OCR は Expo Go 不可。EAS development build（`npx expo start --dev-client`）が必要。画像は端末外へ送らない。

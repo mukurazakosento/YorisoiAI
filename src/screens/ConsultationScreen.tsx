@@ -7,6 +7,10 @@ import { ChoiceButton } from '../components/ChoiceButton';
 import { InfoCard } from '../components/InfoCard';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { Screen } from '../components/Screen';
+import {
+  ScreenshotOcrPanel,
+  type ConfirmedOcrPayload,
+} from '../components/ScreenshotOcrPanel';
 import { TextInputField } from '../components/TextInputField';
 import { colors } from '../constants/colors';
 import { getFeatureById } from '../constants/features';
@@ -18,6 +22,13 @@ import {
   requestConsultation,
   type ConsultHistoryTurn,
 } from '../services/ai';
+import {
+  applyOcrConfirmation,
+  assembleConsultationSendText,
+  clearOcrAutofill,
+  createEmptyOcrInputState,
+  type OcrInputState,
+} from '../services/ocr/consultationText';
 import type { AiResponse } from '../types/ai';
 import type { ConsultationChoice } from '../types/consultation';
 import type { RootStackParamList } from '../types/navigation';
@@ -38,7 +49,9 @@ export function ConsultationScreen({ navigation, route }: Props) {
   const connection = useMemo(() => getAiConnectionBanner(), []);
   const { fontSize } = useSettings();
 
-  const [inputText, setInputText] = useState('');
+  const [ocrInput, setOcrInput] = useState<OcrInputState>(
+    createEmptyOcrInputState(),
+  );
   const [choices, setChoices] = useState<ConsultationChoice[]>(initialChoices);
   const [choicesAreDynamic, setChoicesAreDynamic] = useState(false);
   const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(null);
@@ -46,7 +59,25 @@ export function ConsultationScreen({ navigation, route }: Props) {
   const [history, setHistory] = useState<ConsultHistoryTurn[]>([]);
   const [busy, setBusy] = useState(false);
 
-  const canStart = inputText.trim().length > 0 || selectedChoiceId !== null;
+  const inputText = ocrInput.inputText;
+
+  const canStart =
+    assembleConsultationSendText(inputText).length > 0 ||
+    selectedChoiceId !== null;
+
+  const handleOcrConfirmed = (payload: ConfirmedOcrPayload) => {
+    // 確認・編集済みテキストだけを入力欄へ。生の OCR 結果は受け取らない。
+    setOcrInput((prev) => applyOcrConfirmation(prev, payload.text));
+  };
+
+  const handleOcrCleared = () => {
+    // OCR 自動投入分だけ消し、利用者が別に書いた文は残す
+    setOcrInput((prev) => clearOcrAutofill(prev));
+  };
+
+  const handleInputChange = (text: string) => {
+    setOcrInput((prev) => ({ ...prev, inputText: text }));
+  };
 
   const handleStart = async () => {
     if (!canStart || busy) {
@@ -62,14 +93,15 @@ export function ConsultationScreen({ navigation, route }: Props) {
       return;
     }
 
-    const userText = inputText.trim();
-    const userSummary = [choiceLabel, userText].filter(Boolean).join(' / ');
+    // 実送信パス：入力欄の最終文字列のみ（OCR 生データ・位置ヒント・画像なし）
+    const textForAi = assembleConsultationSendText(inputText);
+    const userSummary = [choiceLabel, textForAi].filter(Boolean).join(' / ');
 
     setBusy(true);
     try {
       const response = await requestConsultation({
         featureId,
-        text: userText,
+        text: textForAi,
         choiceLabel,
         history,
       });
@@ -77,7 +109,7 @@ export function ConsultationScreen({ navigation, route }: Props) {
       setLastResponse(response);
       setHistory((prev) => [
         ...prev,
-        { role: 'user', text: userSummary || userText || choiceLabel || '' },
+        { role: 'user', text: userSummary || textForAi || choiceLabel || '' },
         {
           role: 'assistant',
           text:
@@ -92,7 +124,7 @@ export function ConsultationScreen({ navigation, route }: Props) {
         setChoices(toChoiceItems(response.choices));
         setChoicesAreDynamic(true);
         setSelectedChoiceId(null);
-        setInputText('');
+        setOcrInput(createEmptyOcrInputState());
       }
     } finally {
       setBusy(false);
@@ -105,10 +137,12 @@ export function ConsultationScreen({ navigation, route }: Props) {
     setSelectedChoiceId(null);
     setLastResponse(null);
     setHistory([]);
-    setInputText('');
+    setOcrInput(createEmptyOcrInputState());
   };
 
   const resultBody = buildResultBody(lastResponse);
+  const showScreenshotHint =
+    featureId === 'operationSupport' || featureId === 'textExplanation';
 
   return (
     <Screen>
@@ -119,15 +153,22 @@ export function ConsultationScreen({ navigation, route }: Props) {
       />
 
       <Text style={[styles.lead, { fontSize: fontSize(baseFontSizes.body) }]}>
-        文章を書くか、下の選択肢を押してください。
+        {showScreenshotHint
+          ? '文章を書くか、スクリーンショットから文字を取り込むか、下の選択肢を押してください。'
+          : '文章を書くか、下の選択肢を押してください。スクリーンショットからも文字を取り込めます。'}
       </Text>
 
       <InfoCard message={connection.message} />
 
+      <ScreenshotOcrPanel
+        onConfirmed={handleOcrConfirmed}
+        onCleared={handleOcrCleared}
+      />
+
       <TextInputField
         label="困っていること"
         value={inputText}
-        onChangeText={setInputText}
+        onChangeText={handleInputChange}
         placeholder="例：LINEの通知が来ない"
       />
 
@@ -231,7 +272,6 @@ function buildResultBody(response: AiResponse | null): string | null {
     return '返事を表示できませんでした。もう一度お試しください。';
   }
 
-  // 重複を避けつつ読み順を保つ
   const unique: string[] = [];
   for (const part of parts) {
     if (!unique.includes(part)) {
