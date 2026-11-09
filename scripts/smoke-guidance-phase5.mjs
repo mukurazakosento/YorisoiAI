@@ -34,7 +34,24 @@ assert.match(panel, /分かりません/);
 
 const aiIndex = read('src/services/ai/index.ts');
 assert.match(aiIndex, /guidanceAction/);
+assert.match(aiIndex, /resolveConnectionFromMode/);
 assert.doesNotMatch(aiIndex, /base64|imageUri|screenshot/i);
+
+const consultFn = read('functions/src/ai/consult.ts');
+assert.match(consultFn, /hasGeminiApiKey/);
+assert.match(consultFn, /responseWhenGeminiKeyMissing\(\)/);
+assert.doesNotMatch(
+  consultFn,
+  /AIの鍵がサーバーに設定されていません[\s\S]*mode:\s*'live'/,
+);
+
+const geminiKeySrc = read('functions/src/ai/geminiKey.ts');
+assert.match(geminiKeySrc, /mode:\s*'offline'/);
+assert.match(
+  geminiKeySrc,
+  /AI未接続です。基本の選択肢をご利用ください/,
+);
+assert.doesNotMatch(geminiKeySrc, /mode:\s*'live'/);
 
 const prompts = read('functions/src/ai/prompts.ts');
 assert.match(prompts, /guiding/);
@@ -201,9 +218,58 @@ assert.equal(
   false,
 );
 
+// 9) Gemini 鍵あり / なし・Firebase ありでも Gemini なしは offline
+const geminiKeyUrl = pathToFileURL(
+  path.join(root, 'functions/src/ai/geminiKey.ts'),
+).href;
+const connectionUrl = pathToFileURL(
+  path.join(root, 'src/services/ai/connection.ts'),
+).href;
+const {
+  hasGeminiApiKey,
+  responseWhenGeminiKeyMissing,
+  OFFLINE_NO_GEMINI_MESSAGE,
+} = await import(geminiKeyUrl);
+const { resolveConnectionFromMode, isAiActuallyConnected } =
+  await import(connectionUrl);
+
+assert.equal(hasGeminiApiKey('AIzaSy-demo-key'), true, 'Gemini key set');
+assert.equal(hasGeminiApiKey(''), false, 'Gemini key unset (empty)');
+assert.equal(hasGeminiApiKey('   '), false, 'Gemini key unset (whitespace)');
+assert.equal(hasGeminiApiKey(undefined), false, 'Gemini key unset (undefined)');
+assert.equal(hasGeminiApiKey(null), false, 'Gemini key unset (null)');
+
+const missingKey = responseWhenGeminiKeyMissing();
+assert.equal(missingKey.mode, 'offline');
+assert.equal(missingKey.status, 'error');
+assert.equal(missingKey.message, OFFLINE_NO_GEMINI_MESSAGE);
+assert.equal(missingKey.message, 'AI未接続です。基本の選択肢をご利用ください');
+assert.notEqual(missingKey.mode, 'live');
+
+// Firebase 接続済み相当（callable 成功）でも mode=offline → connection offline
+assert.equal(resolveConnectionFromMode('offline'), 'offline');
+assert.equal(resolveConnectionFromMode('live'), 'live');
+assert.equal(resolveConnectionFromMode('demo'), 'demo');
+assert.equal(resolveConnectionFromMode(undefined), 'live');
+assert.equal(isAiActuallyConnected('offline', 'offline'), false);
+assert.equal(isAiActuallyConnected('live', 'offline'), false);
+assert.equal(isAiActuallyConnected('live', 'live'), true);
+
+// デモ案内メッセージは従来どおり明示デモ（offline 鍵欠落と混同しない）
+const demoMsg = buildDemoConsultationResponse({
+  featureId: 'operationSupport',
+  text: 'LINEがおかしい',
+});
+assert.equal(demoMsg.mode, 'demo');
+assert.match(demoMsg.message ?? '', /デモ|AI未接続/);
+assert.equal(resolveConnectionFromMode(demoMsg.mode), 'demo');
+assert.equal(isAiActuallyConnected('demo', 'demo'), false);
+
 console.log('smoke-guidance-phase5: ok');
 console.log('- LINE曖昧 → 絞り込み');
 console.log('- 通知が届かない → guiding step1（display/voice 分離）');
 console.log('- できました → step2 / 分かりません → 同 step 簡易化');
 console.log('- 完了まで進めば ready_to_help');
 console.log('- Zod normalize + OCR 文脈ガード');
+console.log('- Gemini key set/unset + Firebase+Gemini欠落は offline');
+console.log('- Offline / demo messaging（live 誤表示なし）');

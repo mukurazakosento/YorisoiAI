@@ -51,7 +51,7 @@ export function ConsultationScreen({ navigation, route }: Props) {
   const { featureId } = route.params;
   const feature = getFeatureById(featureId);
   const initialChoices = useMemo(() => INITIAL_CHOICES[featureId], [featureId]);
-  const connection = useMemo(() => getAiConnectionBanner(), []);
+  const localConnection = useMemo(() => getAiConnectionBanner(), []);
   const { fontSize, settings } = useSettings();
 
   const [ocrInput, setOcrInput] = useState<OcrInputState>(
@@ -68,6 +68,19 @@ export function ConsultationScreen({ navigation, route }: Props) {
   const isGuiding = lastResponse?.status === 'guiding';
   const canOfferStart =
     lastResponse !== null && shouldOfferGuidanceStart(featureId, lastResponse);
+
+  // Firebase 公開設定があっても Gemini 未設定（mode=offline）なら接続済みと出さない
+  const connection = useMemo(() => {
+    if (lastResponse?.mode === 'offline') {
+      return {
+        connected: false,
+        message:
+          lastResponse.message?.trim() ||
+          'AI未接続です。基本の選択肢をご利用ください',
+      };
+    }
+    return localConnection;
+  }, [lastResponse, localConnection]);
 
   const canStart =
     assembleConsultationSendText(inputText).length > 0 ||

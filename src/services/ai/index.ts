@@ -6,15 +6,20 @@ import {
   getFirebaseFunctions,
   isFirebaseConfigured,
 } from '../firebase';
+import {
+  resolveConnectionFromMode,
+  type AiConnection,
+} from './connection';
 import { buildDemoConsultationResponse } from './demoFallback';
 import { formatGuidanceHistoryText } from './guidanceDemo';
 import { validateAiResponse } from './schema';
 import type { ConsultRequest, GuidanceAction } from './types';
 
 export type { ConsultHistoryTurn, ConsultRequest, GuidanceAction } from './types';
+export type { AiConnection } from './connection';
 export type ConsultResult = AiResponse & {
   /** live=Functions経由 / demo=明示デモ / offline=未接続フォールバック */
-  connection: 'live' | 'demo' | 'offline';
+  connection: AiConnection;
 };
 
 /**
@@ -59,10 +64,12 @@ export async function requestConsultation(
     });
 
     const validated = validateAiResponse(result.data);
+    // Firebase は生きていても Gemini 未設定なら mode=offline → connection も offline
+    const mode = validated.mode ?? 'live';
     return {
       ...validated,
-      mode: validated.mode ?? 'live',
-      connection: 'live',
+      mode,
+      connection: resolveConnectionFromMode(mode),
     };
   } catch {
     return {
@@ -105,6 +112,10 @@ export function buildAssistantHistoryText(response: AiResponse): string {
   );
 }
 
+export {
+  isAiActuallyConnected,
+  resolveConnectionFromMode,
+} from './connection';
 export { buildDemoConsultationResponse } from './demoFallback';
 export {
   buildDemoGuidanceResponse,
