@@ -3,7 +3,7 @@
 70〜80代向けのスマートフォン支援アプリです。  
 操作支援・文章解説・安全性検査の3機能に絞り、大きな文字と大きなボタンで迷わず使えることを最優先にしています。
 
-現在の実装範囲は **第1段階（プロジェクト準備）** と **第2段階（画面・デザイン）** です。
+現在の実装範囲は **第1〜3段階**（プロジェクト準備・画面・AI相談と動的選択肢）です。
 
 ## 技術構成
 
@@ -12,16 +12,28 @@
 | アプリ | React Native / Expo (SDK 58) / TypeScript |
 | ナビゲーション | React Navigation（Native Stack） |
 | 設定保存 | AsyncStorage（端末内） |
+| AI | Gemini（Firebase Cloud Functions v2 + `@google/genai`） |
+| 検証 | Zod（壊れた JSON でもアプリを落とさない） |
 | OCR（予定） | Google ML Kit Text Recognition v2（端末内のみ） |
-| AI（予定） | Gemini（Firebase Cloud Functions 経由） |
 | 音声（予定） | Expo Speech / iOS AVSpeechSynthesizer |
 | ビルド | Expo EAS Build（iOS development build） |
+
+### Gemini モデル（サーバー env のみ）
+
+実装時に公式ドキュメントで確認した安定 ID:
+
+| 用途 | 環境変数 | 既定値 |
+| --- | --- | --- |
+| 通常チャット | `GEMINI_MODEL_DEFAULT` | `gemini-3.5-flash-lite` |
+| 調査 / Grounding（後続） | `GEMINI_MODEL_GROUNDING` | `gemini-3.8-flash` |
+
+モデル ID はアプリコードに直書きせず、Functions の環境変数 / params で切り替えます。
 
 ## 重要なルール
 
 - **APIキーをアプリやチャットに書かない**（Secret Manager + Cloud Functions）
-- **スクリーンショット画像は外部に送らない**（端末内 OCR のみ）
-- **動いていない AI を動いているように見せない**（未接続は画面で明示）
+- **スクリーンショット画像は外部に送らない**（端末内 OCR のみ。AI にも画像を送らない）
+- **動いていない AI を動いているように見せない**（未接続は「AI未接続」と明示し、デモ案内と区別）
 - 断定的な「安全です」は使わない
 
 ## ディレクトリ構成
@@ -32,17 +44,18 @@ src/
   screens/        # 画面
   navigation/     # 画面遷移
   services/
-    ai/           # AI相談（未接続スタブ）
+    ai/           # 相談クライアント・Zod・デモフォールバック
     ocr/          # 端末内OCR（未実装スタブ）
     speech/       # 音声案内（未実装スタブ）
     security/     # 安全性検査（未実装スタブ）
-    firebase/     # Firebase接続（未設定スタブ）
+    firebase/     # Firebase 公開設定のみ
   hooks/
   types/
   constants/
   utils/
   data/
-functions/        # Cloud Functions（第3段階以降）
+functions/        # Cloud Functions v2（consultWithAi）
+scripts/          # オフライン用スモーク
 ```
 
 ## Windows での開発手順
@@ -75,11 +88,86 @@ npm start
 - Android エミュレータがある場合は `a`
 - iOS 実機確認は下記の EAS development build を使います（Windows からはローカル iOS ビルド不可）
 
-### 4. TypeScript 確認
+### 4. 確認コマンド
 
 ```bat
-npx tsc --noEmit
+npm run typecheck
+node scripts\smoke-ai-phase3.mjs
 ```
+
+Functions 側:
+
+```bat
+cd functions
+npm install
+npm run typecheck
+```
+
+## Firebase / Gemini の設定（秘密をチャットに貼らない）
+
+アプリ本体には **Gemini APIキーを入れません**。  
+サーバー（Cloud Functions）だけが Secret Manager 経由で鍵を読みます。
+
+### A. Firebase プロジェクト
+
+1. [Firebase Console](https://console.firebase.google.com/) でプロジェクトを作成（Functions 利用のため Blaze 推奨）
+2. ウェブアプリを追加し、**公開してよい**設定（`apiKey` / `authDomain` / `projectId` / `appId`）だけ控える
+3. リポジトリで:
+
+```bat
+npm install -g firebase-tools
+firebase login
+copy .firebaserc.example .firebaserc
+```
+
+`.firebaserc` の `YOUR_FIREBASE_PROJECT_ID` を自分のプロジェクト ID に書き換えます（コミットしない想定。`.gitignore` 済み）。
+
+### B. Gemini APIキーを Secret Manager へ
+
+1. [Google AI Studio](https://aistudio.google.com/) などで Gemini APIキーを発行
+2. **キーの文字列をチャットや Issue に貼らない**
+3. ターミナルで（値はプロンプト入力。履歴に残さないよう注意）:
+
+```bat
+firebase functions:secrets:set GEMINI_API_KEY
+```
+
+Functions の params:
+
+- `GEMINI_API_KEY` … Secret（必須・上記コマンドで設定）
+- `GEMINI_MODEL_DEFAULT` … 文字列（既定 `gemini-3.5-flash-lite`。必要ならデプロイ環境の params / `.env` で上書き）
+
+ローカルエミュレータ用に `functions/.env` を作る場合も **コミット禁止**です。値をチャットに貼らないでください。
+
+### C. Functions のデプロイ
+
+```bat
+cd functions
+npm install
+cd ..
+firebase deploy --only functions
+```
+
+デプロイされる Callable: `consultWithAi`（リージョン `asia-northeast1`）
+
+### D. アプリ側の公開設定のみ
+
+ルートに `.env` を作成（`.env.example` を参考。**コミットしない**）:
+
+```bat
+EXPO_PUBLIC_FIREBASE_API_KEY=（公開用）
+EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=（公開用）
+EXPO_PUBLIC_FIREBASE_PROJECT_ID=（公開用）
+EXPO_PUBLIC_FIREBASE_APP_ID=（公開用）
+EXPO_PUBLIC_FIREBASE_FUNCTIONS_REGION=asia-northeast1
+EXPO_PUBLIC_AI_CONNECTED=true
+```
+
+- `EXPO_PUBLIC_*` はクライアントに埋め込まれる公開値だけにしてください
+- `EXPO_PUBLIC_AI_CONNECTED=true` かつ Firebase 公開設定があるときだけ live 呼び出しを試みます
+- 未設定時は画面に **「AI未接続」** と出し、**デモ用案内**を使います（本物の AI のふりをしません）
+
+EAS を使う場合は、同じ名前を EAS Secrets / プロジェクト環境変数へ登録してください。値をチャットに貼らないでください。
 
 ## Expo EAS（iPhone 開発用ビルド）
 
@@ -109,12 +197,6 @@ npx eas build --platform ios --profile development
 - ビルド完了後、QR / リンクから iPhone にインストールします
 - iPhone の **デベロッパモード** をオンにしてください（設定 → プライバシーとセキュリティ）
 
-シミュレータ用:
-
-```bat
-npx eas build --platform ios --profile development-simulator
-```
-
 ### ビルド後の接続
 
 ```bat
@@ -123,64 +205,42 @@ npm start
 
 development build アプリから同じ開発サーバーへ接続します。
 
-## Apple Developer 準備メモ
-
-チャットやリポジトリに証明書・`.p8`・パスワードを貼らないでください。
-
-1. [Apple Developer](https://developer.apple.com/) で Program に加入
-2. EAS に Apple アカウントを連携（`eas credentials` でも可）
-3. Bundle ID: `com.yorisoi.ai`（`app.json` と一致）
-4. 実機を登録し、development build をインストール
-5. iPhone でデベロッパモードを有効化
-
-## Firebase / Gemini 準備メモ（第3段階以降）
-
-まだアプリには接続していません。準備するときは次を想定してください。
-
-1. Firebase プロジェクトを作成（Blaze 推奨: Cloud Functions）
-2. Cloud Functions（第2世代）を追加
-3. Google AI Studio / Google Cloud で Gemini API を有効化
-4. APIキーは **Google Cloud Secret Manager** に保存（アプリに埋め込まない）
-5. 必要に応じて App Check を有効化
-6. Web Risk も同様にサーバー側のみで利用
-
-ローカル用の値は `.env` や EAS Secrets / Firebase コンソールで管理し、**会話やコミットに含めない**でください。
-
-`.gitignore` には `.env*.local` が含まれています。追加の秘密ファイルもコミットしないでください。
-
 ## いま使えること / まだないこと
 
-### 実装済み（Phase 1 + 2）
+### 実装済み（Phase 1〜3）
 
 - Expo + TypeScript プロジェクト
-- 保守しやすい `src/` 構成と `functions/` スタブ
-- ホーム画面（「よりそいAI」ヘッダー、設定歯車、3つの大きな機能ボタン、フッターなし）
-- 各機能の相談画面シェル（入力欄 + 初期選択肢）
-- 設定画面（音声オンオフ、読み上げ速度、文字サイズ、個人情報、アプリについて）
-- 設定の端末内永続化
-- AI 未接続の明示表示
+- ホーム画面（3つの大きな機能ボタン、設定、フッターなし）
+- 相談画面（入力 + 初期選択肢 + AI/デモ応答表示）
+- Firebase Cloud Functions v2 `consultWithAi`（Google Gen AI SDK）
+- 構造化 JSON（status / message / question / choices / displayText / voiceText など）+ Zod 検証
+- Firebase 未設定時の「AI未接続」明示とラベル付きデモ選択肢
+- 動的選択肢の配線（例: 「LINEがおかしい」→絞り込み、「スマホが変」→簡単な追加質問）
+- README による Secret Manager 手順（鍵をチャットに貼らせない）
 
 ### 未実装（後続段階）
 
-- Gemini 接続・動的選択肢（第3段階）
 - 端末内 OCR（第4段階）
-- 操作支援の1ステップ案内（第5段階）
-- 文章解説・安全性検査の本処理（第6段階）
+- 操作支援の1ステップ案内（できました / もう一度聞く / 分かりません）（第5段階）
+- 文章解説の本格レイアウト、電話番号 Search Grounding、Web Risk（第6段階）
 - Expo Speech の本接続（第7段階）
 - 実機 EAS 署名・ストア提出の本番運用（第8段階）
 
-## プレビューのしかた（最短）
+## Phase 3 の試し方（最短）
 
 1. `npm install`
-2. `npm start`
-3. ブラウザで Web を開く（画面遷移と文字サイズ変更の確認用）
-4. iPhone 実機は `eas build --platform ios --profile development` のあと、development build で確認
+2. `npm start` → Web で「操作支援」を開く
+3. バナーに **AI未接続** と出ることを確認
+4. 「LINEがおかしい」と入力 → 「この内容で進む」
+5. デモ案内と、通知が届かない等の **絞り込み選択肢**が出ることを確認
+6. 「スマホが変」と入力 → **一つずつの追加質問**系デモになることを確認
+7. Firebase / Gemini を用意したあとは `.env` で公開設定と `EXPO_PUBLIC_AI_CONNECTED=true` を入れ、Functions デプロイ後に同じ操作で live 応答を確認
 
 ## 次の作業
 
-1. Expo / EAS プロジェクト ID を自分のアカウントで初期化
-2. Apple Developer 連携で iOS development build を作成
-3. 第3段階: Firebase Functions + Gemini（キー未設定時は未接続を明示したまま）
+1. Firebase プロジェクトと `GEMINI_API_KEY` シークレットを自分の環境で設定
+2. 第4段階: 端末内 OCR（画像は外部送信しない）
+3. 第5段階: 操作支援の1ステップ案内
 
 ## ライセンス
 

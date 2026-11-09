@@ -1,3 +1,6 @@
-# AI functions
+# AI Functions
 
-Gemini API 呼び出し（構造化 JSON）をここに実装します。第3段階以降。
+- `consultWithAi` … テキスト相談 → Gemini（通常モデル）→ 構造化 JSON
+- APIキーは Secret Manager の `GEMINI_API_KEY` のみ
+- モデル ID は `GEMINI_MODEL_DEFAULT`（既定: `gemini-3.5-flash-lite`）
+- 画像は受け取らない
