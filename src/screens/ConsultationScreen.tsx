@@ -7,6 +7,10 @@ import { ChoiceButton } from '../components/ChoiceButton';
 import { InfoCard } from '../components/InfoCard';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { Screen } from '../components/Screen';
+import {
+  ScreenshotOcrPanel,
+  type ConfirmedOcrPayload,
+} from '../components/ScreenshotOcrPanel';
 import { TextInputField } from '../components/TextInputField';
 import { colors } from '../constants/colors';
 import { getFeatureById } from '../constants/features';
@@ -18,6 +22,7 @@ import {
   requestConsultation,
   type ConsultHistoryTurn,
 } from '../services/ai';
+import { buildConsultationTextFromConfirmedOcr } from '../services/ocr';
 import type { AiResponse } from '../types/ai';
 import type { ConsultationChoice } from '../types/consultation';
 import type { RootStackParamList } from '../types/navigation';
@@ -45,8 +50,26 @@ export function ConsultationScreen({ navigation, route }: Props) {
   const [lastResponse, setLastResponse] = useState<AiResponse | null>(null);
   const [history, setHistory] = useState<ConsultHistoryTurn[]>([]);
   const [busy, setBusy] = useState(false);
+  const [confirmedOcr, setConfirmedOcr] = useState<ConfirmedOcrPayload | null>(
+    null,
+  );
 
-  const canStart = inputText.trim().length > 0 || selectedChoiceId !== null;
+  const canStart =
+    inputText.trim().length > 0 ||
+    selectedChoiceId !== null ||
+    Boolean(confirmedOcr?.text.trim());
+
+  const handleOcrConfirmed = (payload: ConfirmedOcrPayload) => {
+    setConfirmedOcr(payload);
+    // 確認済みテキストを入力欄にも反映（利用者がさらに直せる）
+    if (!inputText.trim()) {
+      setInputText(payload.text);
+    }
+  };
+
+  const handleOcrCleared = () => {
+    setConfirmedOcr(null);
+  };
 
   const handleStart = async () => {
     if (!canStart || busy) {
@@ -63,13 +86,27 @@ export function ConsultationScreen({ navigation, route }: Props) {
     }
 
     const userText = inputText.trim();
-    const userSummary = [choiceLabel, userText].filter(Boolean).join(' / ');
+    // 確認済み OCR テキストのみ織り込む。画像 URI / Base64 は絶対に含めない。
+    const textForAi = confirmedOcr
+      ? buildConsultationTextFromConfirmedOcr({
+          confirmedText: confirmedOcr.text,
+          layoutHints: confirmedOcr.layoutHints,
+          userNote:
+            userText && userText !== confirmedOcr.text.trim()
+              ? userText
+              : undefined,
+        })
+      : userText;
+
+    const userSummary = [choiceLabel, textForAi || userText]
+      .filter(Boolean)
+      .join(' / ');
 
     setBusy(true);
     try {
       const response = await requestConsultation({
         featureId,
-        text: userText,
+        text: textForAi,
         choiceLabel,
         history,
       });
@@ -106,9 +143,12 @@ export function ConsultationScreen({ navigation, route }: Props) {
     setLastResponse(null);
     setHistory([]);
     setInputText('');
+    setConfirmedOcr(null);
   };
 
   const resultBody = buildResultBody(lastResponse);
+  const showScreenshotHint =
+    featureId === 'operationSupport' || featureId === 'textExplanation';
 
   return (
     <Screen>
@@ -119,10 +159,17 @@ export function ConsultationScreen({ navigation, route }: Props) {
       />
 
       <Text style={[styles.lead, { fontSize: fontSize(baseFontSizes.body) }]}>
-        文章を書くか、下の選択肢を押してください。
+        {showScreenshotHint
+          ? '文章を書くか、スクリーンショットから文字を取り込むか、下の選択肢を押してください。'
+          : '文章を書くか、下の選択肢を押してください。スクリーンショットからも文字を取り込めます。'}
       </Text>
 
       <InfoCard message={connection.message} />
+
+      <ScreenshotOcrPanel
+        onConfirmed={handleOcrConfirmed}
+        onCleared={handleOcrCleared}
+      />
 
       <TextInputField
         label="困っていること"

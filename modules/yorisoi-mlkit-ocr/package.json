@@ -1,0 +1,21 @@
+{
+  "name": "yorisoi-mlkit-ocr",
+  "version": "0.1.0",
+  "description": "On-device Japanese OCR via Google ML Kit Text Recognition v2 (Expo Modules)",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {},
+  "keywords": [
+    "expo",
+    "react-native",
+    "ocr",
+    "mlkit",
+    "japanese"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "expo": "*",
+    "react": "*",
+    "react-native": "*"
+  }
+}
