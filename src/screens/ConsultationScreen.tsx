@@ -4,9 +4,12 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { AppHeader } from '../components/AppHeader';
 import { ChoiceButton } from '../components/ChoiceButton';
+import { ExplanationResultPanel } from '../components/ExplanationResultPanel';
 import { GuidanceStepPanel } from '../components/GuidanceStepPanel';
 import { InfoCard } from '../components/InfoCard';
 import { PrimaryButton } from '../components/PrimaryButton';
+import { SafetyPhoneConsentPanel } from '../components/SafetyPhoneConsentPanel';
+import { SafetyResultPanel } from '../components/SafetyResultPanel';
 import { Screen } from '../components/Screen';
 import {
   ScreenshotOcrPanel,
@@ -25,6 +28,7 @@ import {
   shouldOfferGuidanceStart,
   type ConsultHistoryTurn,
   type GuidanceAction,
+  type SafetyAction,
 } from '../services/ai';
 import {
   applyOcrConfirmation,
@@ -33,6 +37,12 @@ import {
   createEmptyOcrInputState,
   type OcrInputState,
 } from '../services/ocr/consultationText';
+import {
+  buildPhoneSearchPayload,
+  extractPhoneCandidates,
+  looksLikeMessageInquiry,
+  looksLikePhoneInquiry,
+} from '../services/security';
 import { speak, stopSpeaking } from '../services/speech';
 import type { AiResponse } from '../types/ai';
 import type { ConsultationChoice } from '../types/consultation';
@@ -63,9 +73,13 @@ export function ConsultationScreen({ navigation, route }: Props) {
   const [lastResponse, setLastResponse] = useState<AiResponse | null>(null);
   const [history, setHistory] = useState<ConsultHistoryTurn[]>([]);
   const [busy, setBusy] = useState(false);
+  const [phoneDraft, setPhoneDraft] = useState('');
+  const [showPhoneConsent, setShowPhoneConsent] = useState(false);
 
   const inputText = ocrInput.inputText;
   const isGuiding = lastResponse?.status === 'guiding';
+  const isExplained = lastResponse?.status === 'explained';
+  const isSafetyResult = lastResponse?.status === 'safety_result';
   const canOfferStart =
     lastResponse !== null && shouldOfferGuidanceStart(featureId, lastResponse);
 
@@ -104,7 +118,7 @@ export function ConsultationScreen({ navigation, route }: Props) {
       rate: settings.speechRate,
       language: 'ja-JP',
     }).catch(() => {
-      // Phase 5: 音声失敗でも画面案内は続ける
+      // 音声失敗でも画面案内は続ける
     });
   }, [
     isGuiding,
@@ -127,13 +141,20 @@ export function ConsultationScreen({ navigation, route }: Props) {
         language: 'ja-JP',
       });
     } catch {
-      // Phase 5: 音声失敗でも画面案内は続ける
+      // 音声失敗でも画面案内は続ける
     }
   };
 
   const handleOcrConfirmed = (payload: ConfirmedOcrPayload) => {
     // 確認・編集済みテキストだけを入力欄へ。生の OCR 結果は受け取らない。
     setOcrInput((prev) => applyOcrConfirmation(prev, payload.text));
+    if (featureId === 'safetyCheck') {
+      const phones = extractPhoneCandidates(payload.text);
+      if (phones.length > 0) {
+        setPhoneDraft(phones[0].display);
+        setShowPhoneConsent(true);
+      }
+    }
   };
 
   const handleOcrCleared = () => {
@@ -164,6 +185,15 @@ export function ConsultationScreen({ navigation, route }: Props) {
       return;
     }
 
+    if (response.status === 'explained' || response.status === 'safety_result') {
+      setSelectedChoiceId(null);
+      if (response.choices && response.choices.length > 0) {
+        setChoices(toChoiceItems(response.choices));
+        setChoicesAreDynamic(true);
+      }
+      return;
+    }
+
     if (response.choices && response.choices.length > 0) {
       setChoices(toChoiceItems(response.choices));
       setChoicesAreDynamic(true);
@@ -180,7 +210,11 @@ export function ConsultationScreen({ navigation, route }: Props) {
     const choiceLabel = choices.find((c) => c.id === selectedChoiceId)?.label;
     if (
       choiceLabel === '最初の選択肢に戻る' ||
-      choiceLabel === '別のことで相談する'
+      choiceLabel === '別のことで相談する' ||
+      choiceLabel === '別の文章を解説する' ||
+      choiceLabel === '別の内容を確認する' ||
+      choiceLabel === '別の番号を調べる' ||
+      choiceLabel === '別の文章を確認する'
     ) {
       handleResetChoices();
       return;
@@ -190,6 +224,26 @@ export function ConsultationScreen({ navigation, route }: Props) {
 
     // 実送信パス：入力欄の最終文字列のみ（OCR 生データ・位置ヒント・画像なし）
     const textForAi = assembleConsultationSendText(inputText);
+
+    // 安全性検査: 電話番号は同意 UI を挟む（番号だけを後で送る）
+    if (
+      featureId === 'safetyCheck' &&
+      !guidanceAction &&
+      looksLikePhoneInquiry(textForAi, choiceLabel) &&
+      !looksLikeMessageInquiry(textForAi, choiceLabel)
+    ) {
+      const phones = extractPhoneCandidates(textForAi);
+      setPhoneDraft(phones[0]?.display || textForAi.trim());
+      setShowPhoneConsent(true);
+      setSelectedChoiceId(null);
+      return;
+    }
+
+    let safetyAction: SafetyAction | undefined;
+    if (featureId === 'safetyCheck' && looksLikeMessageInquiry(textForAi, choiceLabel)) {
+      safetyAction = 'message_analyze';
+    }
+
     const userSummary = [choiceLabel, textForAi].filter(Boolean).join(' / ');
 
     setBusy(true);
@@ -200,8 +254,44 @@ export function ConsultationScreen({ navigation, route }: Props) {
         choiceLabel,
         history,
         guidanceAction,
+        safetyAction,
       });
       applyResponse(response, userSummary || textForAi || choiceLabel || '');
+      if (
+        response.voiceText &&
+        (response.status === 'explained' || response.status === 'safety_result')
+      ) {
+        void playVoice(response.voiceText);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handlePhoneSearch = async () => {
+    if (busy) {
+      return;
+    }
+    const payload = buildPhoneSearchPayload(phoneDraft);
+    if (payload.length < 10) {
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const response = await requestConsultation({
+        featureId: 'safetyCheck',
+        text: payload,
+        choiceLabel: '電話番号の公開情報調査',
+        history,
+        safetyAction: 'phone_search',
+        searchConsent: true,
+      });
+      setShowPhoneConsent(false);
+      applyResponse(response, `電話番号調査（同意済み）: ${payload}`);
+      if (response.voiceText) {
+        void playVoice(response.voiceText);
+      }
     } finally {
       setBusy(false);
     }
@@ -277,11 +367,29 @@ export function ConsultationScreen({ navigation, route }: Props) {
     setLastResponse(null);
     setHistory([]);
     setOcrInput(createEmptyOcrInputState());
+    setShowPhoneConsent(false);
+    setPhoneDraft('');
   };
 
   const resultBody = buildResultBody(lastResponse);
   const showScreenshotHint =
-    featureId === 'operationSupport' || featureId === 'textExplanation';
+    featureId === 'operationSupport' ||
+    featureId === 'textExplanation' ||
+    featureId === 'safetyCheck';
+
+  const inputLabel =
+    featureId === 'textExplanation'
+      ? '解説したい文章'
+      : featureId === 'safetyCheck'
+        ? '確認したい番号・文章'
+        : '困っていること';
+
+  const inputPlaceholder =
+    featureId === 'textExplanation'
+      ? '例：写真へのアクセスを許可しますか？'
+      : featureId === 'safetyCheck'
+        ? '例：09012345678 または SMSの文章'
+        : '例：LINEの通知が来ない';
 
   return (
     <Screen>
@@ -296,7 +404,7 @@ export function ConsultationScreen({ navigation, route }: Props) {
           ? '次の操作を一つだけ行ってください。画面の文字を取り込むこともできます。'
           : showScreenshotHint
             ? '文章を書くか、スクリーンショットから文字を取り込むか、下の選択肢を押してください。'
-            : '文章を書くか、下の選択肢を押してください。スクリーンショットからも文字を取り込めます。'}
+            : '文章を書くか、下の選択肢を押してください。'}
       </Text>
 
       <InfoCard message={connection.message} />
@@ -330,11 +438,23 @@ export function ConsultationScreen({ navigation, route }: Props) {
       ) : (
         <>
           <TextInputField
-            label="困っていること"
+            label={inputLabel}
             value={inputText}
             onChangeText={handleInputChange}
-            placeholder="例：LINEの通知が来ない"
+            placeholder={inputPlaceholder}
           />
+
+          {showPhoneConsent ? (
+            <SafetyPhoneConsentPanel
+              phoneNumber={phoneDraft}
+              onChangePhoneNumber={setPhoneDraft}
+              busy={busy}
+              onSearch={() => {
+                void handlePhoneSearch();
+              }}
+              onCancel={() => setShowPhoneConsent(false)}
+            />
+          ) : null}
 
           <View style={styles.choicesHeader}>
             <Text
@@ -397,7 +517,21 @@ export function ConsultationScreen({ navigation, route }: Props) {
             />
           ) : null}
 
-          {resultBody ? (
+          {isExplained && lastResponse?.explanation ? (
+            <ExplanationResultPanel
+              response={lastResponse}
+              onReplay={handleReplay}
+            />
+          ) : null}
+
+          {isSafetyResult && lastResponse ? (
+            <SafetyResultPanel
+              response={lastResponse}
+              onReplay={handleReplay}
+            />
+          ) : null}
+
+          {!isExplained && !isSafetyResult && resultBody ? (
             <View style={styles.result}>
               {lastResponse?.mode === 'demo' ||
               lastResponse?.mode === 'offline' ? (
@@ -462,8 +596,12 @@ function buildResultBody(response: AiResponse | null): string | null {
     return null;
   }
 
-  // guiding は専用パネルで表示する
-  if (response.status === 'guiding') {
+  // guiding / explained / safety_result は専用パネルで表示する
+  if (
+    response.status === 'guiding' ||
+    response.status === 'explained' ||
+    response.status === 'safety_result'
+  ) {
     return null;
   }
 

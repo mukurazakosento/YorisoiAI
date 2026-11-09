@@ -3,7 +3,7 @@
 70〜80代向けのスマートフォン支援アプリです。  
 操作支援・文章解説・安全性検査の3機能に絞り、大きな文字と大きなボタンで迷わず使えることを最優先にしています。
 
-現在の実装範囲は **第1〜5段階**（プロジェクト準備・画面・AI相談・端末内 OCR・操作支援の1ステップ案内）です。
+現在の実装範囲は **第1〜6段階**（プロジェクト準備・画面・AI相談・端末内 OCR・操作支援の1ステップ案内・文章解説・安全性検査）です。
 
 ## 技術構成
 
@@ -16,7 +16,9 @@
 | 検証 | Zod（壊れた JSON でもアプリを落とさない） |
 | OCR | Google ML Kit Text Recognition v2 **日本語**（端末内のみ・ローカル Expo Module） |
 | 画像選択 | Expo ImagePicker（写真ライブラリ） |
-| 音声 | Expo Speech（Phase 5 で案内読み上げを軽接続。本格 UX は第7段階） |
+| 音声 | Expo Speech（案内・解説の軽い読み上げ。本格 UX は第7段階） |
+| URL検査 | Google Web Risk（サーバー側・鍵未設定時は正直に未照合） |
+| 電話番号調査 | Gemini Google Search Grounding（同意後・番号のみ） |
 | ビルド | Expo EAS Build（iOS development build） |
 
 ### Gemini モデル（サーバー env のみ）
@@ -49,7 +51,7 @@ src/
     ai/           # 相談クライアント・Zod・デモフォールバック
     ocr/          # 端末内OCR境界（選択・認識・一時ファイル削除）
     speech/       # 音声案内（Expo Speech の軽い読み上げ）
-    security/     # 安全性検査（未実装スタブ）
+    security/     # 電話番号・URL抽出（調査本体は Functions）
     firebase/     # Firebase 公開設定のみ
   hooks/
   types/
@@ -99,6 +101,7 @@ npm run typecheck
 node scripts\smoke-ai-phase3.mjs
 node scripts\smoke-ocr-phase4.mjs
 node scripts\smoke-guidance-phase5.mjs
+node scripts\smoke-safety-phase6.mjs
 ```
 
 Functions 側:
@@ -178,10 +181,11 @@ Google ML Kit 日本語モデルはシミュレータでは使えないことが
 
 1. EAS development build を iPhone に入れる
 2. `npx expo start --dev-client` で接続
-3. 「操作支援」または「文章解説」を開く
+3. 「操作支援」「文章解説」「安全性検査」のいずれかを開く
 4. 「写真からスクリーンショットを選ぶ」
 5. 読み取った文字を確認・修正 →「この文字で相談する」
 6. 「この内容で進む」で、確認済みテキストだけが相談に渡ることを確認
+7. 安全性検査で電話番号の場合は、番号確認のあと **公開情報検索への同意** が必要です（番号以外は送りません）
 
 Web / Expo Go では、OCR ボタンを押すと「development build が必要」と明示されます（ダミー成功なし）。
 
@@ -218,6 +222,8 @@ Functions の params:
 
 - `GEMINI_API_KEY` … Secret（必須・上記コマンドで設定）
 - `GEMINI_MODEL_DEFAULT` … 文字列（既定 `gemini-3.5-flash-lite`。必要ならデプロイ環境の params / `.env` で上書き）
+- `GEMINI_MODEL_GROUNDING` … 文字列（既定 `gemini-3.8-flash`。電話番号の公開情報調査）
+- `WEBRISK_API_KEY` … Secret（任意。URL検査。未設定でもアプリは動き、照合は「未設定」と明示）
 
 ローカルエミュレータ用に `functions/.env` を作る場合も **コミット禁止**です。値をチャットに貼らないでください。
 
@@ -253,7 +259,7 @@ EAS を使う場合は、同じ名前を EAS Secrets / プロジェクト環境�
 
 ## いま使えること / まだないこと
 
-### 実装済み（Phase 1〜5）
+### 実装済み（Phase 1〜6）
 
 - Expo + TypeScript プロジェクト
 - ホーム画面（3つの大きな機能ボタン、設定）
@@ -264,31 +270,37 @@ EAS を使う場合は、同じ名前を EAS Secrets / プロジェクト環境�
 - **一時画像の削除、Expo Go 非対応の明示、Android 差し替え用スタブ**
 - **操作支援の1ステップ案内（displayText / voiceText、できました / もう一度聞く / 分かりません）**
 - **確認済み OCR テキストを案内文脈に任意利用（画像・生OCR・layoutHints は送らない）**
+- **文章解説（表示文 / 簡単に言うと / 操作後 / 注意 / 判断ポイント。文脈不足では許可・拒否を勧めない）**
+- **安全性検査（電話番号: 確認→同意→Search Grounding、SMS/メール分析、Web Risk 枠。出典捏造なし・「安全です」禁止）**
+- **GEMINI 未設定時は mode=offline（Firebase だけ生きていても live にしない）**
 - Expo Speech による案内の軽い読み上げ（停止・再開などの本格 UX は第7段階）
 - README による Secret Manager / EAS development build 手順（鍵をチャットに貼らせない）
 
 ### 未実装（後続段階）
 
 - Android 向け ML Kit OCR の本実装（モジュール境界は用意済み）
-- 文章解説の本格レイアウト、電話番号 Search Grounding、Web Risk（第6段階）
 - Expo Speech の本格 UX（一時停止・再開など）（第7段階）
 - 実機 EAS 署名・ストア提出の本番運用（第8段階）
 
-## Phase 5 の試し方（最短・オフライン）
+## Phase 6 の試し方（最短・オフライン）
 
 1. `npm install`
 2. `npm run typecheck`
 3. `npm run smoke:ai`
 4. `npm run smoke:ocr`
 5. `npm run smoke:guidance`
-6. `npm start` → Web で「操作支援」→「LINEがおかしい」→「通知が届かない」でデモの1ステップ案内と3ボタンを確認
+6. `npm run smoke:safety`
+7. `npm start`
+   - 「文章解説」→「写真へのアクセスを許可しますか？」で5区画デモ
+   - 「安全性検査」→ 番号入力 → 同意パネル → デモ結果（安全断定なし）
+   - 「安全性検査」→ 詐欺っぽい SMS 文で危険特徴デモ
 
 実機 OCR は上記 EAS development build 手順へ。
 
 ## 次の作業
 
-1. EAS development build を実機に入れ、日本語スクリーンショットで OCR と案内を確認
-2. 第6段階: 文章解説・安全性検査の本格化
+1. EAS development build を実機に入れ、OCR・解説・安全性検査を通し確認
+2. 第7段階: 音声案内の本格 UX（停止・再開など）
 3. Android OCR の差し替え実装
 
 ## ライセンス

@@ -29,6 +29,7 @@ npm run typecheck
 node scripts\smoke-ai-phase3.mjs
 node scripts\smoke-ocr-phase4.mjs
 node scripts\smoke-guidance-phase5.mjs
+node scripts\smoke-safety-phase6.mjs
 cd functions && npm run typecheck
 npx expo start
 ```

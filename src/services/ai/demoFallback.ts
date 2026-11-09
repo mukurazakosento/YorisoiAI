@@ -1,10 +1,16 @@
 import type { AiResponse } from '../../types/ai';
 import type { FeatureId } from '../../types/navigation';
+import { buildDemoExplanationResponse } from './explanationDemo';
 import {
   buildDemoGuidanceResponse,
   type GuidanceDemoInput,
 } from './guidanceDemo';
-import type { ConsultHistoryTurn, GuidanceAction } from './types';
+import { buildDemoSafetyResponse } from './safetyDemo';
+import type {
+  ConsultHistoryTurn,
+  GuidanceAction,
+  SafetyAction,
+} from './types';
 
 export type DemoConsultInput = {
   featureId: FeatureId;
@@ -12,6 +18,8 @@ export type DemoConsultInput = {
   choiceLabel?: string;
   history?: ConsultHistoryTurn[];
   guidanceAction?: GuidanceAction;
+  safetyAction?: SafetyAction;
+  searchConsent?: boolean;
 };
 
 const DEMO_PREFIX = '【デモ・AI未接続】';
@@ -19,7 +27,7 @@ const DEMO_PREFIX = '【デモ・AI未接続】';
 /**
  * Firebase / Gemini 未設定時の明示デモ応答。
  * ライブ AI のふりをせず、ラベル付きのフォールバック選択肢を返す。
- * 操作支援で問題が特定できたら 1 ステップ案内へ進む。
+ * 操作支援・文章解説・安全性検査それぞれに専用デモを持つ。
  */
 export function buildDemoConsultationResponse(
   input: DemoConsultInput,
@@ -36,6 +44,30 @@ export function buildDemoConsultationResponse(
   const guidance = buildDemoGuidanceResponse(guidanceInput);
   if (guidance) {
     return guidance;
+  }
+
+  if (input.featureId === 'textExplanation') {
+    const explanation = buildDemoExplanationResponse({
+      text: input.text,
+      choiceLabel: input.choiceLabel,
+      history: input.history,
+    });
+    if (explanation) {
+      return explanation;
+    }
+  }
+
+  if (input.featureId === 'safetyCheck') {
+    const safety = buildDemoSafetyResponse({
+      text: input.text,
+      choiceLabel: input.choiceLabel,
+      history: input.history,
+      safetyAction: input.safetyAction,
+      searchConsent: input.searchConsent,
+    });
+    if (safety) {
+      return safety;
+    }
   }
 
   const combined = `${input.choiceLabel ?? ''} ${input.text}`.trim();
@@ -76,40 +108,6 @@ export function buildDemoConsultationResponse(
       displayText: 'LINEの困りごとを選んでください。',
       voiceText:
         'LINEで困っている内容を、下の選択肢から選んでください。近いものがなければ、その他の問題を押してください。',
-    };
-  }
-
-  if (input.featureId === 'textExplanation') {
-    return {
-      status: 'need_more_info',
-      mode: 'demo',
-      message: `${DEMO_PREFIX} 文章解説のデモです。実際のAI解説にはまだつながっていません。`,
-      question: 'どの種類の表示ですか？',
-      choices: [
-        '許可しますか？と出た',
-        'インストールの確認',
-        '専門用語が分からない',
-        'その他の文章',
-      ],
-      displayText: '表示の種類を選んでください。',
-    };
-  }
-
-  if (input.featureId === 'safetyCheck') {
-    return {
-      status: 'need_more_info',
-      mode: 'demo',
-      message: `${DEMO_PREFIX} 安全性検査のデモです。「安全です」とは言いません。確認したいものを選んでください。`,
-      question: '何を確認したいですか？',
-      choices: [
-        '知らない電話番号',
-        'SMSの文章',
-        'メールの文章',
-        'URL（リンク）',
-        'その他',
-      ],
-      displayText: '確認したいものを選んでください。',
-      riskLevel: 'insufficient_info',
     };
   }
 

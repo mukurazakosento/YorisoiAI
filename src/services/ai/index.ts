@@ -13,9 +13,14 @@ import {
 import { buildDemoConsultationResponse } from './demoFallback';
 import { formatGuidanceHistoryText } from './guidanceDemo';
 import { validateAiResponse } from './schema';
-import type { ConsultRequest, GuidanceAction } from './types';
+import type { ConsultRequest, GuidanceAction, SafetyAction } from './types';
 
-export type { ConsultHistoryTurn, ConsultRequest, GuidanceAction } from './types';
+export type {
+  ConsultHistoryTurn,
+  ConsultRequest,
+  GuidanceAction,
+  SafetyAction,
+} from './types';
 export type { AiConnection } from './connection';
 export type ConsultResult = AiResponse & {
   /** live=Functions経由 / demo=明示デモ / offline=未接続フォールバック */
@@ -27,7 +32,7 @@ export type ConsultResult = AiResponse & {
  * - Firebase 未設定 → 「AI未接続」デモ（ライブのふりをしない）
  * - 設定あり → Cloud Functions `consultWithAi` を呼ぶ
  * - 応答は Zod で検証し、壊れた JSON でも落とさない
- * - 操作支援の guidanceAction で1ステップ案内を進める
+ * - 操作支援 / 文章解説 / 安全性検査（同意付き電話調査含む）
  */
 export async function requestConsultation(
   request: ConsultRequest,
@@ -61,6 +66,8 @@ export async function requestConsultation(
       choiceLabel: request.choiceLabel,
       history: request.history,
       guidanceAction: request.guidanceAction,
+      safetyAction: request.safetyAction,
+      searchConsent: request.searchConsent,
     });
 
     const validated = validateAiResponse(result.data);
@@ -104,6 +111,23 @@ export function buildAssistantHistoryText(response: AiResponse): string {
   if (response.status === 'guiding') {
     return formatGuidanceHistoryText(response);
   }
+  if (response.status === 'explained' && response.explanation) {
+    const e = response.explanation;
+    return [
+      `【表示】${e.displayedText}`,
+      `【簡単に】${e.plainMeaning}`,
+      `【操作後】${e.whatHappens}`,
+    ].join(' / ');
+  }
+  if (response.status === 'safety_result') {
+    return [
+      response.displayText,
+      response.message,
+      response.riskLevel ? `risk:${response.riskLevel}` : '',
+    ]
+      .filter(Boolean)
+      .join(' / ');
+  }
   return (
     response.message ??
     response.displayText ??
@@ -117,9 +141,19 @@ export {
   resolveConnectionFromMode,
 } from './connection';
 export { buildDemoConsultationResponse } from './demoFallback';
+export { buildDemoExplanationResponse } from './explanationDemo';
 export {
   buildDemoGuidanceResponse,
   formatGuidanceHistoryText,
   shouldOfferGuidanceStart,
 } from './guidanceDemo';
-export { validateAiResponse, parseAiResponseText, normalizeGuidanceFields } from './schema';
+export { buildDemoSafetyResponse } from './safetyDemo';
+export {
+  validateAiResponse,
+  parseAiResponseText,
+  normalizeGuidanceFields,
+  normalizeExplanationFields,
+  normalizeSafetyFields,
+  normalizeAiResponseFields,
+  riskLevelLabel,
+} from './schema';
