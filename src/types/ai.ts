@@ -1,6 +1,6 @@
 /**
- * Gemini から受け取る構造化回答の型（第3段階で本格利用）。
- * 今は画面シェル用に定義のみ置く。
+ * Gemini から受け取る構造化回答の型。
+ * Zod スキーマ（src/services/ai/schema.ts）と揃える。
  */
 export type AiStatus =
   | 'need_more_info'
@@ -11,6 +11,8 @@ export type AiStatus =
   | 'error';
 
 export type AiRiskLevel = 'dangerous' | 'caution' | 'insufficient_info';
+
+export type AiResponseMode = 'live' | 'demo' | 'offline';
 
 export type AiResponse = {
   status: AiStatus;
@@ -25,4 +27,6 @@ export type AiResponse = {
   riskLevel?: AiRiskLevel;
   recommendedActions?: string[];
   sources?: { title: string; url: string }[];
+  /** live=本番AI / demo=明示デモ / offline=未接続 */
+  mode?: AiResponseMode;
 };

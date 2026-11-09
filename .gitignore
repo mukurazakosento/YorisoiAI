@@ -3,6 +3,11 @@
 # dependencies
 node_modules/
 
+# Firebase Functions build output
+functions/lib/
+functions/.env
+.firebaserc
+
 # Expo
 .expo/
 dist/

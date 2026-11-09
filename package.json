@@ -1,6 +1,6 @@
 {
   "name": "yorisoi-ai",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "main": "index.ts",
   "dependencies": {
     "@expo/metro-runtime": "~58.0.17",
@@ -10,12 +10,14 @@
     "expo": "~58.0.23",
     "expo-speech": "~58.0.3",
     "expo-status-bar": "~58.0.4",
+    "firebase": "^11.10.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-native": "0.88.1",
     "react-native-safe-area-context": "~5.11.1",
     "react-native-screens": "~4.30.1",
-    "react-native-web": "^0.21.4"
+    "react-native-web": "^0.21.4",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/react": "~19.3.0",
@@ -26,7 +28,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "smoke:ai": "node scripts/smoke-ai-phase3.mjs"
   },
   "private": true
 }

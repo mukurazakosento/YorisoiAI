@@ -1,5 +1,5 @@
-/**
- * Firebase Cloud Functions エントリ（第3段階で実装）。
- * Gemini / Web Risk の APIキーは Secret Manager で管理し、アプリに埋め込まない。
- */
-export {};
+import { initializeApp } from 'firebase-admin/app';
+
+initializeApp();
+
+export { consultWithAi } from './ai/consult';
