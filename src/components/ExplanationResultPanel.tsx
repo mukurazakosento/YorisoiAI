@@ -5,11 +5,10 @@ import { layout } from '../constants/layout';
 import { baseFontSizes } from '../constants/typography';
 import { useSettings } from '../hooks/useSettings';
 import type { AiExplanation, AiResponse } from '../types/ai';
-import { PrimaryButton } from './PrimaryButton';
+import { SpeechControls } from './SpeechControls';
 
 type ExplanationResultPanelProps = {
   response: AiResponse;
-  onReplay?: () => void;
 };
 
 const SECTIONS: {
@@ -28,7 +27,6 @@ const SECTIONS: {
  */
 export function ExplanationResultPanel({
   response,
-  onReplay,
 }: ExplanationResultPanelProps) {
   const { fontSize } = useSettings();
   const explanation = response.explanation;
@@ -87,13 +85,10 @@ export function ExplanationResultPanel({
         </Text>
       ) : null}
 
-      {onReplay && (response.voiceText || response.displayText) ? (
-        <PrimaryButton
-          label="もう一度聞く"
-          variant="secondary"
-          onPress={onReplay}
-        />
-      ) : null}
+      <SpeechControls
+        voiceText={response.voiceText}
+        displayFallback={response.displayText || explanation.plainMeaning}
+      />
     </View>
   );
 }

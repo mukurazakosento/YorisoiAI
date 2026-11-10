@@ -32,7 +32,7 @@ const aiConnectedFlag =
 
 export const appConfig = {
   appName: 'よりそいAI',
-  appVersion: '0.6.0',
+  appVersion: '0.7.0',
   aiModelKeys: {
     default: 'gemini-default',
     grounding: 'gemini-grounding',

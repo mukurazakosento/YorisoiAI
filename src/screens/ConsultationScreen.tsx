@@ -333,13 +333,6 @@ export function ConsultationScreen({ navigation, route }: Props) {
     }
   };
 
-  const handleReplay = () => {
-    if (!lastResponse?.voiceText && !lastResponse?.displayText) {
-      return;
-    }
-    void playVoice(lastResponse.voiceText || lastResponse.displayText || '');
-  };
-
   const handleStartGuidance = async () => {
     if (busy) {
       return;
@@ -428,7 +421,6 @@ export function ConsultationScreen({ navigation, route }: Props) {
             onDone={() => {
               void handleGuidanceAction('done');
             }}
-            onReplay={handleReplay}
             onSimplify={() => {
               void handleGuidanceAction('simplify');
             }}
@@ -518,17 +510,11 @@ export function ConsultationScreen({ navigation, route }: Props) {
           ) : null}
 
           {isExplained && lastResponse?.explanation ? (
-            <ExplanationResultPanel
-              response={lastResponse}
-              onReplay={handleReplay}
-            />
+            <ExplanationResultPanel response={lastResponse} />
           ) : null}
 
           {isSafetyResult && lastResponse ? (
-            <SafetyResultPanel
-              response={lastResponse}
-              onReplay={handleReplay}
-            />
+            <SafetyResultPanel response={lastResponse} />
           ) : null}
 
           {!isExplained && !isSafetyResult && resultBody ? (

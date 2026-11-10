@@ -9,6 +9,7 @@
 - 依存追加は `npx expo install <package>`（firebase / zod など Expo 非管理パッケージは `npm install`）
 - AI はアプリ直叩き禁止。`functions/` の Callable → `@google/genai`
 - モデル ID は Functions の env/params のみ（既定: `gemini-3.5-flash-lite`）
+- 音声は Expo Speech（`src/services/speech/`）。displayText と voiceText を分離
 
 ## Hard rules
 
@@ -16,6 +17,7 @@
 - 画像（スクショ）を外部 AI / Functions / Storage に送らない
 - 未接続の AI を動いているように見せない（`AI未接続` + デモラベル）
 - Windows 向けコマンドを README に書く（ローカル iOS ビルドを前提にしない）
+- Apple の証明書・パスワード・APIキーを README やコードに書かない（必要な準備だけ説明する）
 
 ## Layout
 
@@ -30,6 +32,7 @@ node scripts\smoke-ai-phase3.mjs
 node scripts\smoke-ocr-phase4.mjs
 node scripts\smoke-guidance-phase5.mjs
 node scripts\smoke-safety-phase6.mjs
+node scripts\smoke-speech-phase7.mjs
 cd functions && npm run typecheck
 npx expo start
 ```

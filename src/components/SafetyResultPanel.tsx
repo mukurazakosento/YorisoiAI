@@ -6,20 +6,18 @@ import { baseFontSizes } from '../constants/typography';
 import { useSettings } from '../hooks/useSettings';
 import { riskLevelLabel } from '../services/ai/schema';
 import type { AiResponse, AiRiskLevel } from '../types/ai';
-import { PrimaryButton } from './PrimaryButton';
+import { SpeechControls } from './SpeechControls';
 
 type SafetyResultPanelProps = {
   response: AiResponse;
-  onReplay?: () => void;
 };
 
 /**
  * 安全性検査結果: 3段階リスク・推奨行動・実在出典のみ・URL検査状態。
- * 断定的な安全宣言は表示しない。
+ * 断定的な安全宣言は表示しない。画面文言は常時表示し、音声は別経路。
  */
 export function SafetyResultPanel({
   response,
-  onReplay,
 }: SafetyResultPanelProps) {
   const { fontSize } = useSettings();
   const riskLevel: AiRiskLevel = response.riskLevel ?? 'insufficient_info';
@@ -169,13 +167,10 @@ export function SafetyResultPanel({
         </Text>
       )}
 
-      {onReplay && (response.voiceText || response.displayText) ? (
-        <PrimaryButton
-          label="もう一度聞く"
-          variant="secondary"
-          onPress={onReplay}
-        />
-      ) : null}
+      <SpeechControls
+        voiceText={response.voiceText}
+        displayFallback={response.displayText || response.message}
+      />
     </View>
   );
 }

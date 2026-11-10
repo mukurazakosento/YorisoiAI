@@ -18,7 +18,6 @@ function read(rel) {
 const screen = read('src/screens/ConsultationScreen.tsx');
 assert.match(screen, /GuidanceStepPanel/);
 assert.match(screen, /できました|onDone/);
-assert.match(screen, /もう一度聞く|onReplay/);
 assert.match(screen, /分かりません|onSimplify/);
 assert.match(screen, /assembleConsultationSendText/);
 assert.match(screen, /guidanceAction/);
@@ -29,7 +28,7 @@ const panel = read('src/components/GuidanceStepPanel.tsx');
 assert.match(panel, /displayText/);
 assert.match(panel, /currentStep/);
 assert.match(panel, /できました/);
-assert.match(panel, /もう一度聞く/);
+assert.match(panel, /SpeechControls/);
 assert.match(panel, /分かりません/);
 
 const aiIndex = read('src/services/ai/index.ts');
