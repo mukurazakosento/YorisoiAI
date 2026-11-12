@@ -1,33 +1,25 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { AppHeader } from '../components/AppHeader';
 import { FeatureButton } from '../components/FeatureButton';
 import { Screen } from '../components/Screen';
-import { colors } from '../constants/colors';
 import { FEATURES } from '../constants/features';
-import { baseFontSizes } from '../constants/typography';
-import { useSettings } from '../hooks/useSettings';
 import type { RootStackParamList } from '../types/navigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
+/**
+ * ホーム: 左「よりそいAI」／右設定／3ボタンのみ。フッターなし・スクロールなし。
+ */
 export function HomeScreen({ navigation }: Props) {
-  const { fontSize } = useSettings();
-
   return (
-    <Screen>
+    <Screen contentStyle={styles.content}>
       <AppHeader
+        brandLeft
         showSettings
         onPressSettings={() => navigation.navigate('Settings')}
       />
-
-      <Text
-        style={[styles.lead, { fontSize: fontSize(baseFontSizes.body) }]}
-        accessibilityRole="text"
-      >
-        困っていることを選んでください。
-      </Text>
 
       <View style={styles.list}>
         {FEATURES.map((feature) => (
@@ -46,13 +38,13 @@ export function HomeScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  lead: {
-    color: colors.textSecondary,
-    lineHeight: 28,
-    marginTop: 8,
+  content: {
+    gap: 12,
   },
   list: {
-    gap: 16,
-    marginTop: 4,
+    flex: 1,
+    gap: 14,
+    paddingTop: 8,
+    paddingBottom: 8,
   },
 });

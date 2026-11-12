@@ -1,0 +1,1 @@
+export { classifyIntentStub } from './intent';

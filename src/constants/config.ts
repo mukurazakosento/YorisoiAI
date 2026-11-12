@@ -1,11 +1,8 @@
 /**
- * アプリ側の公開設定。Gemini APIキーや秘密情報はここに書かない。
- * 実通信は Firebase Cloud Functions + Secret Manager 経由。
+ * アプリ側の公開設定。APIキーや秘密情報はここに書かない。
  *
- * モデル ID の「論理名」のみ。実際のモデル文字列はサーバー env で管理する。
- * 公式確認時点の推奨実 ID（サーバー側）:
- * - 通常: gemini-3.5-flash-lite
- * - 調査: gemini-3.8-flash
+ * 最終仕様の AI 目標は端末内 Llama / WebLLM。
+ * 旧 Gemini Cloud Functions 経路は任意の後方互換として残し、必須にはしない。
  */
 function readPublicEnv(name: string): string {
   const value = process.env[name];
@@ -32,10 +29,10 @@ const aiConnectedFlag =
 
 export const appConfig = {
   appName: 'よりそいAI',
-  appVersion: '0.7.0',
+  appVersion: '0.8.0-phase-a',
   aiModelKeys: {
-    default: 'gemini-default',
-    grounding: 'gemini-grounding',
+    default: 'on-device-llama',
+    grounding: 'optional-cloud-grounding',
   },
   firebase: {
     apiKey: firebaseApiKey,
