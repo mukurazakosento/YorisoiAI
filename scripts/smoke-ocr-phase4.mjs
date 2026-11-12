@@ -35,17 +35,26 @@ assert.match(ocrIndex, /deleteTempImageUri/);
 assert.match(ocrIndex, /recognizeJapaneseText|yorisoi-mlkit-ocr/);
 assert.match(ocrIndex, /assembleConsultationSendText/);
 
-const screen = read('src/screens/ConsultationScreen.tsx');
-assert.match(screen, /assembleConsultationSendText/);
-assert.match(screen, /applyOcrConfirmation/);
-assert.match(screen, /clearOcrAutofill/);
-assert.doesNotMatch(screen, /buildConsultationTextFromConfirmedOcr/);
-assert.doesNotMatch(screen, /confirmedOcr\.text/);
-assert.doesNotMatch(screen, /buildLayoutHints\(/);
+// 最終仕様: OCR は支援セッションの利用者開始フレーム経路へ配線
+const supportSession = read('src/screens/SupportSessionScreen.tsx');
+assert.match(supportSession, /SessionCapturePanel|requestUserFrame|startCaptureSession/);
+assert.match(supportSession, /rebuildGuidanceFromConfirmedFrame|confirmFrameText/);
+assert.doesNotMatch(supportSession, /buildLayoutHints\(/);
+assert.doesNotMatch(supportSession, /imageBase64|screenshotBytes/);
+assert.doesNotMatch(supportSession, /\bScrollView\b/);
+
+const captureSession = read('src/services/capture/session.ts');
+assert.match(captureSession, /pickAndRecognizeScreenshot|pickFrameViaOcr/);
+assert.match(captureSession, /confirmFrameText/);
+assert.doesNotMatch(captureSession, /layoutHints/);
 
 const panel = read('src/components/ScreenshotOcrPanel.tsx');
 assert.doesNotMatch(panel, /buildLayoutHints\(/);
 assert.match(panel, /onConfirmed\(\{ text \}\)/);
+
+const sessionCapturePanel = read('src/components/SessionCapturePanel.tsx');
+assert.match(sessionCapturePanel, /この文字で進む/);
+assert.doesNotMatch(sessionCapturePanel, /\bScrollView\b/);
 
 const swift = read('modules/yorisoi-mlkit-ocr/ios/YorisoiMlkitOcrModule.swift');
 assert.match(swift, /JapaneseTextRecognizerOptions/);
@@ -57,7 +66,7 @@ const androidStub = read(
 );
 assert.match(androidStub, /OCR_ANDROID_NOT_READY|これから用意/);
 
-// --- Import the REAL assembly module used by ConsultationScreen ---
+// --- Import the REAL assembly module（確認済みテキストのみ） ---
 const consultationTextUrl = pathToFileURL(
   path.join(root, 'src/services/ocr/consultationText.ts'),
 ).href;

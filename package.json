@@ -1,6 +1,6 @@
 {
   "name": "yorisoi-ai",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "main": "index.ts",
   "dependencies": {
     "@expo/metro-runtime": "~58.0.17",
@@ -43,7 +43,8 @@
     "smoke:safety": "node --import tsx scripts/smoke-safety-phase6.mjs",
     "smoke:speech": "node --import tsx scripts/smoke-speech-phase7.mjs",
     "smoke:session": "node --import tsx scripts/smoke-session-phase-b.mjs",
-    "smoke:on-device": "node --import tsx scripts/smoke-on-device-ai-phase-c.mjs"
+    "smoke:on-device": "node --import tsx scripts/smoke-on-device-ai-phase-c.mjs",
+    "smoke:capture": "node --import tsx scripts/smoke-capture-phase-d.mjs"
   },
   "private": true
 }

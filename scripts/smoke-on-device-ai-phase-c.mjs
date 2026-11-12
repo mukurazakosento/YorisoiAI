@@ -91,7 +91,7 @@ assert.match(readme, /AI未接続/);
 const packageJson = JSON.parse(read('package.json'));
 assert.ok(packageJson.dependencies['@mlc-ai/web-llm']);
 assert.match(packageJson.scripts['smoke:on-device'], /smoke-on-device-ai-phase-c/);
-assert.match(packageJson.version, /^0\.10\./);
+assert.match(packageJson.version, /^0\.1[0-9]\./);
 
 // 画像を AI に送る経路が onDeviceAi に無いこと
 for (const file of [
