@@ -2,7 +2,7 @@ import type { FeatureId } from './navigation';
 
 /**
  * 最終仕様の支援フロー状態機械。
- * Phase B: 案内・通知・音声を実装。画面収録／定期OCRは準備中のまま。
+ * Phase D: 利用者開始のフレーム取り込み＋端末内 OCR（確認済み文字のみ）。
  */
 export type SupportFlowPhase =
   | 'home'
@@ -39,13 +39,6 @@ export type SessionScript = {
   /** デモ明示用（端末内 AI 未接続時は必ず true） */
   isDemo: boolean;
   steps: SessionInstructionStep[];
-};
-
-export type CaptureStubStatus = '準備中';
-
-export type SupportSessionCaptureStatus = {
-  recording: CaptureStubStatus;
-  periodicOcr: CaptureStubStatus;
 };
 
 /** 通知ペイロードの種別 */

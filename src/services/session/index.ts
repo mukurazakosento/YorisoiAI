@@ -15,3 +15,12 @@ export {
   initOnDeviceAi,
   isOnDeviceAiReady,
 } from '../onDeviceAi';
+
+/** 画面収録・フレーム OCR（Phase D） */
+export {
+  getCaptureAvailability,
+  getFeatureCapturePath,
+  isBroadcastUploadLinked,
+  startCaptureSession,
+  stopCaptureSession,
+} from '../capture';

@@ -28,8 +28,9 @@ assert.match(supportSession, /guiding/);
 assert.match(supportSession, /offer_end/);
 assert.match(supportSession, /ここをタップで支援を終了/);
 assert.match(supportSession, /デモ/);
-assert.match(supportSession, /画面収録：準備中/);
-assert.match(supportSession, /定期OCR：準備中/);
+assert.match(supportSession, /startCaptureSession|SessionCapturePanel/);
+assert.doesNotMatch(supportSession, /画面収録：準備中/);
+assert.doesNotMatch(supportSession, /定期OCR：準備中/);
 assert.match(supportSession, /speak\(/);
 assert.match(supportSession, /stopSpeaking/);
 assert.match(supportSession, /presentInstructionNotification/);
@@ -81,10 +82,10 @@ assert.ok(packageJson.dependencies['expo-notifications']);
 assert.match(packageJson.scripts['smoke:session'], /smoke-session-phase-b/);
 
 const readme = read('README.md');
-assert.match(readme, /Phase B|支援セッション/);
+assert.match(readme, /Phase B|支援セッション|Phase D/);
 assert.match(readme, /通知/);
 assert.match(readme, /Expo Speech|音声/);
-assert.match(readme, /準備中/);
+assert.match(readme, /画面収録|OCR|Broadcast/);
 
 // --- Runtime: demo scripts for 3 features ---
 const demoUrl = pathToFileURL(

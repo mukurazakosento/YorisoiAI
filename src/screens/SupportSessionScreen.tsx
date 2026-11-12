@@ -5,10 +5,24 @@ import { StyleSheet, Text, View } from 'react-native';
 import { AppHeader } from '../components/AppHeader';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { Screen } from '../components/Screen';
+import { SessionCapturePanel } from '../components/SessionCapturePanel';
 import { colors } from '../constants/colors';
 import { getFeatureById } from '../constants/features';
 import { baseFontSizes } from '../constants/typography';
 import { useSettings } from '../hooks/useSettings';
+import {
+  clearFrameDraft,
+  confirmFrameText,
+  getCaptureSessionState,
+  rebuildGuidanceFromConfirmedFrame,
+  requestUserFrame,
+  shouldPreferOpenAppBeforeOcr,
+  startCaptureSession,
+  stopCaptureSession,
+  subscribeCaptureSession,
+  updateFrameDraft,
+  type CaptureSessionState,
+} from '../services/capture';
 import {
   addEndSupportResponseListener,
   dismissSessionNotifications,
@@ -42,7 +56,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'SupportSession'>;
 
 /**
  * 支援セッション: start → guiding（一手ずつ）→ offer_end → EndSupport。
- * 通知＋音声で案内。画面収録／定期OCRは準備中のまま（偽動作なし）。
+ * Phase D: 利用者開始のフレーム取り込み＋端末内 OCR（確認済み文字のみ案内へ）。
  * スクロール禁止。消音でも画面の displayText は必ず出す。
  */
 export function SupportSessionScreen({ navigation, route }: Props) {
@@ -55,6 +69,10 @@ export function SupportSessionScreen({ navigation, route }: Props) {
   const [stepIndex, setStepIndex] = useState(0);
   const [tone, setTone] = useState<SessionStepTone>('normal');
   const [notifyHint, setNotifyHint] = useState('通知の準備中…');
+  const [capture, setCapture] = useState<CaptureSessionState>(() =>
+    getCaptureSessionState(),
+  );
+  const [guidanceBusy, setGuidanceBusy] = useState(false);
   const startedRef = useRef(false);
 
   const step = script?.steps[stepIndex];
@@ -71,15 +89,25 @@ export function SupportSessionScreen({ navigation, route }: Props) {
         ? step.simplifyVoiceText
         : step.voiceText;
 
+  const reviewingCapture = capture.phase === 'review';
+  // 安全性チェックは「開いた」あと（2手目以降）で読み取りを勧める
+  const allowRead =
+    !shouldPreferOpenAppBeforeOcr(featureId) || stepIndex >= 1 || Boolean(capture.confirmed);
+
   const goEndSupport = useCallback(() => {
     void stopSpeaking().catch(() => {
       // no-op
     });
+    stopCaptureSession();
     void dismissSessionNotifications();
     navigation.navigate('EndSupport', { featureId, summary });
   }, [navigation, featureId, summary]);
 
-  // セッション開始: 端末内AI（未接続時はデモ脚本）＋通知許可
+  useEffect(() => {
+    return subscribeCaptureSession(setCapture);
+  }, []);
+
+  // セッション開始: 端末内AI（未接続時はデモ）＋収録境界＋通知許可
   useEffect(() => {
     if (startedRef.current) {
       return;
@@ -87,6 +115,7 @@ export function SupportSessionScreen({ navigation, route }: Props) {
     startedRef.current = true;
 
     void (async () => {
+      startCaptureSession(featureId);
       const guidance = await buildGuidanceScript({ featureId, summary });
       setScript(guidance.script);
 
@@ -101,20 +130,20 @@ export function SupportSessionScreen({ navigation, route }: Props) {
       void stopSpeaking().catch(() => {
         // no-op
       });
+      stopCaptureSession();
       void dismissSessionNotifications();
     };
   }, [featureId, summary]);
 
-  // 終了通知タップ → EndSupport（OSが拒否しても画面内ボタンで同等）
   useEffect(() => {
     return addEndSupportResponseListener(() => {
       goEndSupport();
     });
   }, [goEndSupport]);
 
-  // 一手ごとに画面文言＋通知＋音声
+  // 一手ごとに画面文言＋通知＋音声（OCR 確認中は抑止）
   useEffect(() => {
-    if (phase !== 'guiding' || !step) {
+    if (phase !== 'guiding' || !step || reviewingCapture) {
       return;
     }
 
@@ -150,9 +179,9 @@ export function SupportSessionScreen({ navigation, route }: Props) {
     settings.voiceEnabled,
     settings.speechRate,
     step,
+    reviewingCapture,
   ]);
 
-  // 案内完了 → 終了オファー＋終了通知
   useEffect(() => {
     if (phase !== 'offer_end') {
       return;
@@ -215,6 +244,38 @@ export function SupportSessionScreen({ navigation, route }: Props) {
     });
   };
 
+  const handleRequestFrame = () => {
+    void requestUserFrame();
+  };
+
+  const handleConfirmDraft = () => {
+    if (guidanceBusy) {
+      return;
+    }
+    const confirmed = confirmFrameText();
+    if (!confirmed) {
+      return;
+    }
+
+    setGuidanceBusy(true);
+    void (async () => {
+      try {
+        const rebuilt = await rebuildGuidanceFromConfirmedFrame({
+          featureId,
+          baseSummary: summary,
+          confirmedText: confirmed.text,
+        });
+        setScript(rebuilt.script);
+        setStepIndex(0);
+        setTone('normal');
+        setPhase('guiding');
+        setNotifyHint('確認した画面の文字に合わせて案内を更新しました。');
+      } finally {
+        setGuidanceBusy(false);
+      }
+    })();
+  };
+
   const aiDemo = !isOnDeviceAiReady() || script?.isDemo !== false;
   const stepLabel =
     script && phase === 'guiding'
@@ -232,6 +293,7 @@ export function SupportSessionScreen({ navigation, route }: Props) {
           void stopSpeaking().catch(() => {
             // no-op
           });
+          stopCaptureSession();
           navigation.goBack();
         }}
       />
@@ -259,60 +321,69 @@ export function SupportSessionScreen({ navigation, route }: Props) {
         {summary}
       </Text>
 
-      <View style={styles.captureRow}>
-        <Text
-          style={[styles.captureText, { fontSize: fontSize(baseFontSizes.caption) }]}
-          numberOfLines={1}
-        >
-          画面収録：準備中
-        </Text>
-        <Text
-          style={[styles.captureText, { fontSize: fontSize(baseFontSizes.caption) }]}
-          numberOfLines={1}
-        >
-          定期OCR：準備中
-        </Text>
-      </View>
+      {phase !== 'starting' ? (
+        <SessionCapturePanel
+          featureId={featureId}
+          capture={capture}
+          allowRead={allowRead && phase === 'guiding'}
+          onRequestFrame={handleRequestFrame}
+          onConfirmDraft={handleConfirmDraft}
+          onClearDraft={() => {
+            clearFrameDraft();
+          }}
+          onChangeDraft={(text) => {
+            updateFrameDraft(text);
+          }}
+        />
+      ) : null}
 
-      <Text
-        style={[styles.stepLabel, { fontSize: fontSize(baseFontSizes.caption) }]}
-      >
-        {stepLabel}
-      </Text>
+      {!reviewingCapture ? (
+        <>
+          <Text
+            style={[styles.stepLabel, { fontSize: fontSize(baseFontSizes.caption) }]}
+          >
+            {stepLabel}
+          </Text>
 
-      <View style={styles.instructionCard}>
-        <Text
-          style={[
-            styles.displayText,
-            { fontSize: fontSize(baseFontSizes.title) },
-          ]}
-          numberOfLines={4}
-          accessibilityRole="header"
-        >
-          {phase === 'offer_end'
-            ? END_SUPPORT_DISPLAY
-            : phase === 'starting'
-              ? '案内を準備しています…'
-              : displayText}
-        </Text>
-        <Text
-          style={[styles.notifyHint, { fontSize: fontSize(baseFontSizes.caption) }]}
-          numberOfLines={2}
-        >
-          {notifyHint}
-        </Text>
-        <Text
-          style={[styles.muteHint, { fontSize: fontSize(baseFontSizes.caption) }]}
-          numberOfLines={2}
-        >
-          {settings.voiceEnabled ? SPEECH_MUTE_HELP : SPEECH_DISABLED_HELP}
-        </Text>
-      </View>
+          <View style={styles.instructionCard}>
+            <Text
+              style={[
+                styles.displayText,
+                { fontSize: fontSize(baseFontSizes.title) },
+              ]}
+              numberOfLines={3}
+              accessibilityRole="header"
+            >
+              {phase === 'offer_end'
+                ? END_SUPPORT_DISPLAY
+                : phase === 'starting'
+                  ? '案内を準備しています…'
+                  : displayText}
+            </Text>
+            <Text
+              style={[styles.notifyHint, { fontSize: fontSize(baseFontSizes.caption) }]}
+              numberOfLines={2}
+            >
+              {notifyHint}
+            </Text>
+            <Text
+              style={[styles.muteHint, { fontSize: fontSize(baseFontSizes.caption) }]}
+              numberOfLines={1}
+            >
+              {settings.voiceEnabled ? SPEECH_MUTE_HELP : SPEECH_DISABLED_HELP}
+            </Text>
+          </View>
+        </>
+      ) : null}
 
       <View style={styles.actions}>
-        {phase === 'guiding' ? (
+        {phase === 'guiding' && !reviewingCapture ? (
           <>
-            <PrimaryButton label="できました" onPress={handleDone} />
+            <PrimaryButton
+              label="できました"
+              onPress={handleDone}
+              disabled={guidanceBusy}
+            />
             <View style={styles.secondaryRow}>
               <View style={styles.secondaryHalf}>
                 <PrimaryButton
@@ -363,7 +434,7 @@ export function SupportSessionScreen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
   content: {
-    gap: 8,
+    gap: 6,
   },
   metaRow: {
     flexDirection: 'row',
@@ -382,16 +453,7 @@ const styles = StyleSheet.create({
   },
   summary: {
     color: colors.textSecondary,
-    lineHeight: 22,
-  },
-  captureRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  captureText: {
-    color: colors.textMuted,
-    fontWeight: '600',
+    lineHeight: 20,
   },
   stepLabel: {
     color: colors.textMuted,
@@ -404,27 +466,27 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 6,
     justifyContent: 'center',
   },
   displayText: {
     color: colors.text,
     fontWeight: '700',
-    lineHeight: 34,
+    lineHeight: 30,
   },
   notifyHint: {
     color: colors.textSecondary,
-    lineHeight: 22,
+    lineHeight: 20,
   },
   muteHint: {
     color: colors.textMuted,
-    lineHeight: 22,
+    lineHeight: 20,
   },
   actions: {
-    gap: 8,
-    paddingBottom: 4,
+    gap: 6,
+    paddingBottom: 2,
   },
   secondaryRow: {
     flexDirection: 'row',
