@@ -29,7 +29,7 @@ const aiConnectedFlag =
 
 export const appConfig = {
   appName: 'よりそいAI',
-  appVersion: '0.8.0-phase-a',
+  appVersion: '0.9.0-phase-b',
   aiModelKeys: {
     default: 'on-device-llama',
     grounding: 'optional-cloud-grounding',

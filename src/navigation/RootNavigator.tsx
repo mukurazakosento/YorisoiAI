@@ -10,12 +10,13 @@ import { PrivacyScreen } from '../screens/PrivacyScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { SupportSessionScreen } from '../screens/SupportSessionScreen';
 import type { RootStackParamList } from '../types/navigation';
+import { navigationRef } from './navigationRef';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export function RootNavigator() {
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <Stack.Navigator
         initialRouteName="Home"
         screenOptions={{

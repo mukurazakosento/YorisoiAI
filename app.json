@@ -2,7 +2,7 @@
   "expo": {
     "name": "よりそいAI",
     "slug": "yorisoi-ai",
-    "version": "0.1.0",
+    "version": "0.9.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -34,6 +34,13 @@
         "expo-image-picker",
         {
           "photosPermission": "スクリーンショットの文字を端末の中だけで読み取るために、写真ライブラリへのアクセスが必要です。"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "sounds": [],
+          "enableBackgroundRemoteNotifications": false
         }
       ],
       [

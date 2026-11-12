@@ -12,7 +12,7 @@ import {
   type FontScaleKey,
 } from '../constants/typography';
 import { useSettings } from '../hooks/useSettings';
-import { stopSpeaking } from '../services/speech';
+import { SPEECH_MUTE_HELP, stopSpeaking } from '../services/speech';
 import { SPEECH_RATE_OPTIONS } from '../types/settings';
 import type { RootStackParamList } from '../types/navigation';
 
@@ -75,9 +75,9 @@ export function SettingsScreen({ navigation }: Props) {
 
         <Text
           style={[styles.hint, { fontSize: fontSize(baseFontSizes.caption) }]}
-          numberOfLines={2}
+          numberOfLines={3}
         >
-          音が出ないときは、iPhone側面の消音スイッチと音量を確認してください。
+          {SPEECH_MUTE_HELP}
         </Text>
       </View>
 
