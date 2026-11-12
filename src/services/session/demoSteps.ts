@@ -4,12 +4,10 @@ import type { SessionScript } from '../../types/session';
 const DEMO = true;
 
 /**
- * 端末内 Llama / WebLLM は未接続。セッション案内は常にデモ。
- * 本番接続後はここで isDemo=false のスクリプトへ切り替える。
+ * デモ案内スクリプトのコーパス。
+ * 接続判定は `services/onDeviceAi`（WebLLM / ネイティブスキャフォールド）が担当。
+ * 未接続時のみここが使われ、常に isDemo=true。
  */
-export function isOnDeviceAiReady(): boolean {
-  return false;
-}
 
 /**
  * 機能と相談サマリーからデモ案内スクリプトを組み立てる。

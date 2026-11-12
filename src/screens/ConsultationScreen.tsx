@@ -12,7 +12,7 @@ import { getFeatureById } from '../constants/features';
 import { baseFontSizes } from '../constants/typography';
 import { INITIAL_CHOICES } from '../data/initialChoices';
 import { useSettings } from '../hooks/useSettings';
-import { classifyIntentStub } from '../services/session';
+import { classifyIntent, isOnDeviceAiReady } from '../services/onDeviceAi';
 import type { RootStackParamList } from '../types/navigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Consultation'>;
@@ -20,6 +20,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Consultation'>;
 /**
  * 相談開始画面: 入力欄 + 約4選択肢をスクロールなしで同時表示。
  * 意図が明確なら支援セッションへ、不明なら AI 選択肢画面へ。
+ * 端末内 AI（WebLLM 等）が未接続のときは明示デモ判定。
  */
 export function ConsultationScreen({ navigation, route }: Props) {
   const { featureId, presetText } = route.params;
@@ -27,6 +28,7 @@ export function ConsultationScreen({ navigation, route }: Props) {
   const choices = useMemo(() => INITIAL_CHOICES[featureId].slice(0, 4), [featureId]);
   const { fontSize } = useSettings();
   const [inputText, setInputText] = useState(presetText ?? '');
+  const [busy, setBusy] = useState(false);
 
   const inputLabel =
     featureId === 'textExplanation'
@@ -42,27 +44,36 @@ export function ConsultationScreen({ navigation, route }: Props) {
         ? '例：知らない番号から電話があった'
         : '例：LINEの通知が来ない';
 
-  const proceed = (text: string, choiceLabel?: string) => {
-    const clarity = classifyIntentStub({ featureId, text, choiceLabel });
-    const summary = [choiceLabel, text].filter(Boolean).join(' / ');
-
-    if (clarity === 'unclear') {
-      navigation.navigate('AiChoice', {
-        featureId,
-        text,
-        choiceLabel,
-        clarifyRound: 1,
-      });
+  const proceed = async (text: string, choiceLabel?: string) => {
+    if (busy) {
       return;
     }
+    setBusy(true);
+    try {
+      const result = await classifyIntent({ featureId, text, choiceLabel });
+      const summary = [choiceLabel, text].filter(Boolean).join(' / ');
 
-    navigation.navigate('SupportSession', {
-      featureId,
-      summary: summary || feature.title,
-    });
+      if (result.clarity === 'unclear') {
+        navigation.navigate('AiChoice', {
+          featureId,
+          text,
+          choiceLabel,
+          clarifyRound: 1,
+        });
+        return;
+      }
+
+      navigation.navigate('SupportSession', {
+        featureId,
+        summary: summary || feature.title,
+      });
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const canSubmit = inputText.trim().length > 0;
+  const canSubmit = inputText.trim().length > 0 && !busy;
+  const demoHint = !isOnDeviceAiReady();
 
   return (
     <Screen contentStyle={styles.content}>
@@ -78,6 +89,15 @@ export function ConsultationScreen({ navigation, route }: Props) {
       >
         文章を書くか、下のどれかを押してください。
       </Text>
+
+      {demoHint ? (
+        <Text
+          style={[styles.demoHint, { fontSize: fontSize(baseFontSizes.caption) }]}
+          numberOfLines={1}
+        >
+          AI未接続・デモ判定（端末内Llamaはまだ準備中）
+        </Text>
+      ) : null}
 
       <TextInputField
         label={inputLabel}
@@ -102,15 +122,19 @@ export function ConsultationScreen({ navigation, route }: Props) {
               key={choice.id}
               label={choice.label}
               compact
-              onPress={() => proceed(inputText.trim(), choice.label)}
+              onPress={() => {
+                void proceed(inputText.trim(), choice.label);
+              }}
             />
           ))}
         </View>
       </View>
 
       <PrimaryButton
-        label="この内容で進む"
-        onPress={() => proceed(inputText.trim())}
+        label={busy ? '確認しています…' : 'この内容で進む'}
+        onPress={() => {
+          void proceed(inputText.trim());
+        }}
         disabled={!canSubmit}
       />
     </Screen>
@@ -124,6 +148,10 @@ const styles = StyleSheet.create({
   lead: {
     color: colors.textSecondary,
     lineHeight: 26,
+  },
+  demoHint: {
+    color: colors.primary,
+    fontWeight: '700',
   },
   choicesBlock: {
     flex: 1,
