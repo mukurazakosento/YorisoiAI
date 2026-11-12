@@ -8,6 +8,8 @@ import { useSettings } from '../hooks/useSettings';
 
 type AppHeaderProps = {
   title?: string;
+  /** ホーム用: 左にブランド名、右に設定 */
+  brandLeft?: boolean;
   showSettings?: boolean;
   showBack?: boolean;
   onPressSettings?: () => void;
@@ -16,12 +18,47 @@ type AppHeaderProps = {
 
 export function AppHeader({
   title = appConfig.appName,
+  brandLeft = false,
   showSettings = false,
   showBack = false,
   onPressSettings,
   onPressBack,
 }: AppHeaderProps) {
   const { fontSize } = useSettings();
+
+  if (brandLeft) {
+    return (
+      <View style={styles.wrap}>
+        <Text
+          style={[styles.brandLeft, { fontSize: fontSize(baseFontSizes.header) }]}
+          numberOfLines={1}
+          accessibilityRole="header"
+        >
+          {title}
+        </Text>
+        {showSettings ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="設定を開く"
+            onPress={onPressSettings}
+            style={({ pressed }) => [
+              styles.iconButton,
+              pressed && styles.pressed,
+            ]}
+            hitSlop={8}
+          >
+            <Text
+              style={[styles.iconText, { fontSize: fontSize(baseFontSizes.button) }]}
+            >
+              ⚙
+            </Text>
+          </Pressable>
+        ) : (
+          <View style={styles.iconPlaceholder} />
+        )}
+      </View>
+    );
+  }
 
   return (
     <View style={styles.wrap}>
@@ -37,7 +74,9 @@ export function AppHeader({
             ]}
             hitSlop={8}
           >
-            <Text style={[styles.iconText, { fontSize: fontSize(baseFontSizes.button) }]}>
+            <Text
+              style={[styles.iconText, { fontSize: fontSize(baseFontSizes.button) }]}
+            >
               ←
             </Text>
           </Pressable>
@@ -66,7 +105,9 @@ export function AppHeader({
             ]}
             hitSlop={8}
           >
-            <Text style={[styles.iconText, { fontSize: fontSize(baseFontSizes.button) }]}>
+            <Text
+              style={[styles.iconText, { fontSize: fontSize(baseFontSizes.button) }]}
+            >
               ⚙
             </Text>
           </Pressable>
@@ -90,6 +131,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.headerBackground,
     marginHorizontal: -layout.screenPadding,
     paddingHorizontal: layout.screenPadding,
+  },
+  brandLeft: {
+    flex: 1,
+    textAlign: 'left',
+    color: colors.text,
+    fontWeight: '700',
+    paddingRight: 12,
   },
   side: {
     width: 56,

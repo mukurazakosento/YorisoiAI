@@ -10,6 +10,8 @@ type TextInputFieldProps = {
   value: string;
   onChangeText: (text: string) => void;
   placeholder?: string;
+  /** ノンスクロール相談画面向けに入力欄を低めにする */
+  compact?: boolean;
 };
 
 export function TextInputField({
@@ -17,6 +19,7 @@ export function TextInputField({
   value,
   onChangeText,
   placeholder,
+  compact = false,
 }: TextInputFieldProps) {
   const { fontSize } = useSettings();
 
@@ -34,9 +37,10 @@ export function TextInputField({
         textAlignVertical="top"
         style={[
           styles.input,
+          compact && styles.inputCompact,
           {
             fontSize: fontSize(baseFontSizes.input),
-            lineHeight: Math.round(fontSize(baseFontSizes.input) * 1.4),
+            lineHeight: Math.round(fontSize(baseFontSizes.input) * 1.35),
           },
         ]}
         accessibilityLabel={label}
@@ -47,7 +51,7 @@ export function TextInputField({
 
 const styles = StyleSheet.create({
   wrap: {
-    gap: 10,
+    gap: 8,
   },
   label: {
     color: colors.text,
@@ -61,6 +65,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.inputBackground,
     color: colors.text,
     paddingHorizontal: 14,
-    paddingVertical: 14,
+    paddingVertical: 12,
+  },
+  inputCompact: {
+    minHeight: layout.inputMinHeight,
+    maxHeight: 96,
   },
 });

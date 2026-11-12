@@ -35,6 +35,7 @@ export function SettingOptionRow({
       {description ? (
         <Text
           style={[styles.description, { fontSize: fontSize(baseFontSizes.caption) }]}
+          numberOfLines={2}
         >
           {description}
         </Text>
@@ -60,6 +61,7 @@ export function SettingOptionRow({
                   { fontSize: fontSize(baseFontSizes.body) },
                   selected && styles.optionLabelSelected,
                 ]}
+                numberOfLines={1}
               >
                 {option.label}
               </Text>
@@ -73,12 +75,13 @@ export function SettingOptionRow({
 
 const styles = StyleSheet.create({
   wrap: {
-    gap: 10,
+    gap: 6,
     backgroundColor: colors.surface,
     borderRadius: layout.borderRadius,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   title: {
     color: colors.text,
@@ -86,20 +89,23 @@ const styles = StyleSheet.create({
   },
   description: {
     color: colors.textSecondary,
-    lineHeight: 26,
+    lineHeight: 22,
   },
   options: {
-    gap: 10,
-    marginTop: 4,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 2,
   },
   option: {
-    minHeight: layout.minButtonHeight,
+    minHeight: 44,
+    minWidth: 72,
+    paddingHorizontal: 12,
     borderWidth: 2,
     borderColor: colors.border,
     borderRadius: layout.borderRadius,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
     backgroundColor: colors.background,
   },
   optionSelected: {

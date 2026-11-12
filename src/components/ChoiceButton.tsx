@@ -9,9 +9,15 @@ type ChoiceButtonProps = {
   label: string;
   selected?: boolean;
   onPress: () => void;
+  compact?: boolean;
 };
 
-export function ChoiceButton({ label, selected = false, onPress }: ChoiceButtonProps) {
+export function ChoiceButton({
+  label,
+  selected = false,
+  onPress,
+  compact = false,
+}: ChoiceButtonProps) {
   const { fontSize } = useSettings();
 
   return (
@@ -21,6 +27,7 @@ export function ChoiceButton({ label, selected = false, onPress }: ChoiceButtonP
       onPress={onPress}
       style={({ pressed }) => [
         styles.button,
+        compact && styles.compact,
         selected && styles.selected,
         pressed && styles.pressed,
       ]}
@@ -31,6 +38,7 @@ export function ChoiceButton({ label, selected = false, onPress }: ChoiceButtonP
           { fontSize: fontSize(baseFontSizes.body) },
           selected && styles.selectedLabel,
         ]}
+        numberOfLines={2}
       >
         {label}
       </Text>
@@ -45,9 +53,14 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: colors.border,
     backgroundColor: colors.surface,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     justifyContent: 'center',
+  },
+  compact: {
+    minHeight: layout.choiceMinHeight,
+    paddingVertical: 8,
+    flex: 1,
   },
   selected: {
     borderColor: colors.primary,
@@ -58,7 +71,7 @@ const styles = StyleSheet.create({
   },
   label: {
     color: colors.text,
-    lineHeight: 28,
+    lineHeight: 24,
   },
   selectedLabel: {
     color: colors.primary,

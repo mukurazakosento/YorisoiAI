@@ -21,7 +21,10 @@ export function PrivacyScreen({ navigation }: Props) {
         showBack
         onPressBack={() => navigation.goBack()}
       />
-      <Text style={[styles.body, { fontSize: fontSize(baseFontSizes.body) }]}>
+      <Text
+        style={[styles.body, { fontSize: fontSize(baseFontSizes.body) }]}
+        numberOfLines={12}
+      >
         {PRIVACY_TEXT}
       </Text>
     </Screen>
@@ -31,6 +34,7 @@ export function PrivacyScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   body: {
     color: colors.text,
-    lineHeight: 30,
+    lineHeight: 28,
+    flexShrink: 1,
   },
 });

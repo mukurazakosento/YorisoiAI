@@ -19,10 +19,7 @@ export function FeatureButton({ title, description, onPress }: FeatureButtonProp
       accessibilityRole="button"
       accessibilityLabel={`${title}。${description}`}
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.button,
-        pressed && styles.pressed,
-      ]}
+      style={({ pressed }) => [styles.button, pressed && styles.pressed]}
     >
       <View style={styles.textWrap}>
         <Text style={[styles.title, { fontSize: fontSize(baseFontSizes.title) }]}>
@@ -33,6 +30,7 @@ export function FeatureButton({ title, description, onPress }: FeatureButtonProp
             styles.description,
             { fontSize: fontSize(baseFontSizes.body) },
           ]}
+          numberOfLines={2}
         >
           {description}
         </Text>
@@ -43,12 +41,13 @@ export function FeatureButton({ title, description, onPress }: FeatureButtonProp
 
 const styles = StyleSheet.create({
   button: {
+    flex: 1,
     minHeight: layout.featureButtonMinHeight,
     backgroundColor: colors.surface,
     borderWidth: 2,
     borderColor: colors.primary,
     borderRadius: layout.borderRadius,
-    paddingVertical: 18,
+    paddingVertical: 16,
     paddingHorizontal: 18,
     justifyContent: 'center',
   },
@@ -56,7 +55,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primarySoft,
   },
   textWrap: {
-    gap: 8,
+    gap: 6,
   },
   title: {
     color: colors.primary,
@@ -64,6 +63,6 @@ const styles = StyleSheet.create({
   },
   description: {
     color: colors.textSecondary,
-    lineHeight: 28,
+    lineHeight: 26,
   },
 });
