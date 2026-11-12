@@ -10,6 +10,7 @@
 - **AI 目標**: 端末内 Llama / WebLLM（未接続時は明示デモ）。クラウド Gemini は必須にしない
 - 旧 `functions/` Gemini Callable は後方互換の任意経路
 - 音声は Expo Speech（`src/services/speech/`）。displayText と voiceText を分離
+- 通知は expo-notifications（`src/services/notifications/`）。拒否時は画面内文言へフォールバック
 
 ## Hard rules
 
@@ -20,20 +21,23 @@
 - Windows 向けコマンドを README に書く（ローカル iOS ビルドを前提にしない）
 - Apple の証明書・パスワード・APIキーを README やコードに書かない
 - iOS の他アプリ常時キャプチャ制限を正直に扱う
+- 断定的な「安全です」は使わない
 
 ## Layout
 
-`src/{components,screens,navigation,services/{ai,ocr,speech,security,firebase,session},hooks,types,constants,utils,data}`  
+`src/{components,screens,navigation,services/{ai,ocr,speech,notifications,security,firebase,session},hooks,types,constants,utils,data}`  
 `functions/src/{ai,shared,...}`（旧 Gemini 経路）
 
-## Phase A 画面フロー
+## Phase B 画面フロー
 
-Home → Consultation（入力+4択）→（不明なら）AiChoice → SupportSession（シェル）→ EndSupport（解決した/しなかった）
+Home → Consultation（入力+4択）→（不明なら）AiChoice → SupportSession（start→guiding→offer_end）→ EndSupport（解決した/しなかった）
 
 ## Checks
 
 ```bat
 npm run typecheck
+npm run smoke:session
+npm run smoke:speech
 npx expo start
 ```
 

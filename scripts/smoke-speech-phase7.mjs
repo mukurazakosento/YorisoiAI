@@ -57,13 +57,17 @@ const safetyPanel = read('src/components/SafetyResultPanel.tsx');
 assert.match(safetyPanel, /SpeechControls/);
 assert.match(safetyPanel, /voiceText/);
 
-const screen = read('src/screens/ConsultationScreen.tsx');
-assert.match(screen, /speak\(/);
-assert.match(screen, /stopSpeaking/);
-assert.match(screen, /settings\.voiceEnabled/);
-assert.match(screen, /settings\.speechRate/);
-assert.match(screen, /voiceText/);
-assert.doesNotMatch(screen, /imageBase64|screenshotBytes/);
+// Phase A 以降、相談画面はシェルのみ。発話配線は支援セッションへ。
+const sessionScreen = read('src/screens/SupportSessionScreen.tsx');
+assert.match(sessionScreen, /speak\(/);
+assert.match(sessionScreen, /stopSpeaking/);
+assert.match(sessionScreen, /settings\.voiceEnabled/);
+assert.match(sessionScreen, /settings\.speechRate/);
+assert.match(sessionScreen, /voiceText/);
+assert.doesNotMatch(sessionScreen, /imageBase64|screenshotBytes/);
+
+const consultation = read('src/screens/ConsultationScreen.tsx');
+assert.doesNotMatch(consultation, /imageBase64|screenshotBytes/);
 
 const settingsScreen = read('src/screens/SettingsScreen.tsx');
 assert.match(settingsScreen, /音声案内/);

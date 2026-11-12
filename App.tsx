@@ -1,13 +1,19 @@
 import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { colors } from './src/constants/colors';
 import { SettingsProvider, useSettings } from './src/hooks/useSettings';
 import { RootNavigator } from './src/navigation/RootNavigator';
+import { configureNotificationHandler } from './src/services/notifications';
 
 function AppReady() {
   const { isReady } = useSettings();
+
+  useEffect(() => {
+    configureNotificationHandler();
+  }, []);
 
   if (!isReady) {
     return (
