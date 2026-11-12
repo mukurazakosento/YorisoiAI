@@ -6,6 +6,7 @@ import {
   getFirebaseFunctions,
   isFirebaseConfigured,
 } from '../firebase';
+import { getOnDeviceAiBanner } from '../onDeviceAi';
 import {
   resolveConnectionFromMode,
   type AiConnection,
@@ -28,16 +29,16 @@ export type ConsultResult = AiResponse & {
 };
 
 /**
- * AI 相談サービス。
- * - Firebase 未設定 → 「AI未接続」デモ（ライブのふりをしない）
+ * 旧 Gemini Cloud Functions 相談サービス（任意・非既定）。
+ * 最終仕様の相談／支援フローは `services/onDeviceAi` を使う。
+ * - legacy フラグOFF / Firebase 未設定 → 「AI未接続」デモ（ライブのふりをしない）
  * - 設定あり → Cloud Functions `consultWithAi` を呼ぶ
  * - 応答は Zod で検証し、壊れた JSON でも落とさない
- * - 操作支援 / 文章解説 / 安全性検査（同意付き電話調査含む）
  */
 export async function requestConsultation(
   request: ConsultRequest,
 ): Promise<ConsultResult> {
-  if (!isFirebaseConfigured() || !appConfig.aiConnected) {
+  if (!isFirebaseConfigured() || !appConfig.legacyCloudAiEnabled) {
     const demo = buildDemoConsultationResponse(request);
     return {
       ...demo,
@@ -93,17 +94,23 @@ export function getAiConnectionBanner(): {
   connected: boolean;
   message: string;
 } {
-  if (isFirebaseConfigured() && appConfig.aiConnected) {
+  // 最終仕様: 端末内 AI の状態を優先表示
+  const onDevice = getOnDeviceAiBanner();
+  if (onDevice.connected) {
+    return onDevice;
+  }
+
+  if (isFirebaseConfigured() && appConfig.legacyCloudAiEnabled) {
     return {
-      connected: true,
-      message: 'AIに接続する準備ができています。相談内容を送るとサーバー経由で答えます。',
+      connected: false,
+      message:
+        '端末内AIは未接続です。旧クラウドGemini経路の設定はありますが、最終仕様の既定ではありません。',
     };
   }
 
   return {
     connected: false,
-    message:
-      'AI未接続です。いまはデモ用の案内と基本の選択肢だけが使えます。本物のAIではありません。',
+    message: onDevice.message,
   };
 }
 

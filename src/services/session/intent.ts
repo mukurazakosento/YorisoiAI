@@ -38,8 +38,8 @@ const CLEAR_KEYWORDS: Record<FeatureId, string[]> = {
 };
 
 /**
- * Phase A の意図判定スタブ。
- * 端末内 Llama 未接続のためヒューリスティックのみ。曖昧なら unclear。
+ * 端末内モデル未接続時の意図判定ヒューリスティック。
+ * `onDeviceAi.classifyIntent` がエンジン未準備のときに使う。曖昧なら unclear。
  */
 export function classifyIntentStub(input: {
   featureId: FeatureId;

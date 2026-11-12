@@ -1,4 +1,5 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { AppHeader } from '../components/AppHeader';
@@ -10,22 +11,57 @@ import { getFeatureById } from '../constants/features';
 import { baseFontSizes } from '../constants/typography';
 import { DEMO_CLARIFY_CHOICES } from '../data/demoClarifyChoices';
 import { useSettings } from '../hooks/useSettings';
+import {
+  clarifyChoicesBanner,
+  generateClarifyChoices,
+} from '../services/onDeviceAi';
+import type { ConsultationChoice } from '../types/consultation';
 import type { RootStackParamList } from '../types/navigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AiChoice'>;
 
 /**
  * 要求が不明なときの選択肢だけの画面（スクロールなし・約4つ）。
- * 端末内 Llama 未接続のためデモ選択肢＋明示ラベル。
+ * 端末内 AI が ready なら動的生成。未接続時はデモ選択肢＋明示ラベル。
  */
 export function AiChoiceScreen({ navigation, route }: Props) {
-  const { featureId, text, clarifyRound } = route.params;
+  const { featureId, text, choiceLabel, clarifyRound } = route.params;
   const feature = getFeatureById(featureId);
   const { fontSize } = useSettings();
-  const choices = DEMO_CLARIFY_CHOICES[featureId].slice(0, 4);
+  const [choices, setChoices] = useState<ConsultationChoice[]>(
+    () => DEMO_CLARIFY_CHOICES[featureId].slice(0, 4),
+  );
+  const [question, setQuestion] = useState(
+    'もう少し具体的に教えてください。下のどれかに近いですか？',
+  );
+  const [banner, setBanner] = useState(() => clarifyChoicesBanner('demo'));
+  const [loading, setLoading] = useState(true);
 
-  const pick = (choiceLabel: string) => {
-    if (choiceLabel.includes('別の言い方')) {
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    void (async () => {
+      const result = await generateClarifyChoices({
+        featureId,
+        text,
+        choiceLabel,
+        clarifyRound,
+      });
+      if (cancelled) {
+        return;
+      }
+      setChoices(result.choices.slice(0, 4));
+      setQuestion(result.question);
+      setBanner(clarifyChoicesBanner(result.mode));
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [featureId, text, choiceLabel, clarifyRound]);
+
+  const pick = (pickedLabel: string) => {
+    if (pickedLabel.includes('別の言い方')) {
       navigation.navigate('Consultation', {
         featureId,
         presetText: text,
@@ -33,10 +69,9 @@ export function AiChoiceScreen({ navigation, route }: Props) {
       return;
     }
 
-    // デモでは1回の具体化で支援セッションへ進む（本物の AI ループは後続）
     navigation.navigate('SupportSession', {
       featureId,
-      summary: choiceLabel,
+      summary: pickedLabel,
     });
   };
 
@@ -52,13 +87,13 @@ export function AiChoiceScreen({ navigation, route }: Props) {
         <Text
           style={[styles.bannerLabel, { fontSize: fontSize(baseFontSizes.caption) }]}
         >
-          デモ選択肢（端末内AIは未接続）
+          {banner}
         </Text>
         <Text
           style={[styles.bannerBody, { fontSize: fontSize(baseFontSizes.body) }]}
           numberOfLines={3}
         >
-          もう少し具体的に教えてください。下のどれかに近いですか？
+          {loading ? '選択肢を用意しています…' : question}
         </Text>
       </View>
 
@@ -76,7 +111,7 @@ export function AiChoiceScreen({ navigation, route }: Props) {
       <Text
         style={[styles.roundHint, { fontSize: fontSize(baseFontSizes.caption) }]}
       >
-        確認 {clarifyRound} 回目（シェル）
+        確認 {clarifyRound} 回目
       </Text>
 
       <PrimaryButton

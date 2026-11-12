@@ -17,10 +17,12 @@ import {
   presentInstructionNotification,
 } from '../services/notifications';
 import {
-  buildDemoSessionScript,
+  buildGuidanceScript,
+  isOnDeviceAiReady,
+} from '../services/onDeviceAi';
+import {
   END_SUPPORT_DISPLAY,
   END_SUPPORT_VOICE,
-  isOnDeviceAiReady,
 } from '../services/session/demoSteps';
 import {
   SPEECH_DISABLED_HELP,
@@ -77,17 +79,17 @@ export function SupportSessionScreen({ navigation, route }: Props) {
     navigation.navigate('EndSupport', { featureId, summary });
   }, [navigation, featureId, summary]);
 
-  // セッション開始: デモ脚本＋通知許可
+  // セッション開始: 端末内AI（未接続時はデモ脚本）＋通知許可
   useEffect(() => {
     if (startedRef.current) {
       return;
     }
     startedRef.current = true;
 
-    const nextScript = buildDemoSessionScript({ featureId, summary });
-    setScript(nextScript);
-
     void (async () => {
+      const guidance = await buildGuidanceScript({ featureId, summary });
+      setScript(guidance.script);
+
       const permission = await ensureNotificationPermission();
       setNotifyHint(permission.detail);
       setPhase('guiding');

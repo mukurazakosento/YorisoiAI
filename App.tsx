@@ -7,12 +7,15 @@ import { colors } from './src/constants/colors';
 import { SettingsProvider, useSettings } from './src/hooks/useSettings';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { configureNotificationHandler } from './src/services/notifications';
+import { initOnDeviceAi } from './src/services/onDeviceAi';
 
 function AppReady() {
   const { isReady } = useSettings();
 
   useEffect(() => {
     configureNotificationHandler();
+    // フラグOFFや WebGPU 無しならすぐ AI未接続（デモ）。成功したふりをしない。
+    void initOnDeviceAi();
   }, []);
 
   if (!isReady) {

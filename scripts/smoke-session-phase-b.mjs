@@ -58,10 +58,13 @@ const demoStepsSrc = read('src/services/session/demoSteps.ts');
 assert.match(demoStepsSrc, /operationSupport/);
 assert.match(demoStepsSrc, /textExplanation/);
 assert.match(demoStepsSrc, /safetyCheck/);
-assert.match(demoStepsSrc, /isOnDeviceAiReady/);
 assert.match(demoStepsSrc, /END_SUPPORT_DISPLAY/);
 // 断定的な「安全です」は使わず、否定で明示する
 assert.match(demoStepsSrc, /「安全です」とは言/);
+
+const onDeviceSrc = read('src/services/onDeviceAi/index.ts');
+assert.match(onDeviceSrc, /isOnDeviceAiReady/);
+assert.match(onDeviceSrc, /buildGuidanceScript/);
 
 const sessionTypes = read('src/types/session.ts');
 assert.match(sessionTypes, /SupportSessionPhase/);
@@ -89,11 +92,15 @@ const demoUrl = pathToFileURL(
 ).href;
 const {
   buildDemoSessionScript,
-  isOnDeviceAiReady,
   END_SUPPORT_DISPLAY,
   END_SUPPORT_VOICE,
 } = await import(demoUrl);
 
+const onDeviceUrl = pathToFileURL(
+  path.join(root, 'src/services/onDeviceAi/status.ts'),
+).href;
+const { isOnDeviceAiReady, resetOnDeviceAiForTests } = await import(onDeviceUrl);
+resetOnDeviceAiForTests();
 assert.equal(isOnDeviceAiReady(), false);
 assert.equal(END_SUPPORT_DISPLAY, 'ここをタップで支援を終了');
 assert.ok(END_SUPPORT_VOICE.length > END_SUPPORT_DISPLAY.length);

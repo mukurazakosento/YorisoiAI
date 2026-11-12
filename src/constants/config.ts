@@ -1,8 +1,8 @@
 /**
  * アプリ側の公開設定。APIキーや秘密情報はここに書かない。
  *
- * 最終仕様の AI 目標は端末内 Llama / WebLLM。
- * 旧 Gemini Cloud Functions 経路は任意の後方互換として残し、必須にはしない。
+ * 最終仕様の AI 既定経路は端末内 Llama / WebLLM。
+ * 旧 Gemini Cloud Functions は EXPO_PUBLIC_LEGACY_CLOUD_AI=true のときだけ任意利用。
  */
 function readPublicEnv(name: string): string {
   const value = process.env[name];
@@ -21,17 +21,36 @@ const firebaseConfigured = Boolean(
 );
 
 /**
- * EXPO_PUBLIC_AI_CONNECTED=true かつ Firebase 公開設定があるときだけ live 呼び出しを試みる。
- * 未設定時は必ずデモ / AI未接続表示。
+ * 端末内 AI ロードを試みるフラグ。
+ * true でも WebGPU / ネイティブモジュールが無ければ AI未接続のまま（live にしない）。
  */
-const aiConnectedFlag =
+const onDeviceAiEnabled =
+  readPublicEnv('EXPO_PUBLIC_ON_DEVICE_AI').toLowerCase() === 'true';
+
+/**
+ * 旧 Gemini Callable を試すときだけ true。
+ * 最終仕様では必須にしない。既定 false。
+ */
+const legacyCloudAiFlag =
+  readPublicEnv('EXPO_PUBLIC_LEGACY_CLOUD_AI').toLowerCase() === 'true';
+
+/** 後方互換: 旧 EXPO_PUBLIC_AI_CONNECTED も legacy フラグとして認める */
+const legacyAiConnectedFlag =
   readPublicEnv('EXPO_PUBLIC_AI_CONNECTED').toLowerCase() === 'true';
+
+const legacyCloudAiEnabled =
+  firebaseConfigured && (legacyCloudAiFlag || legacyAiConnectedFlag);
+
+const onDeviceModelId =
+  readPublicEnv('EXPO_PUBLIC_ON_DEVICE_MODEL_ID') ||
+  'Llama-3.2-1B-Instruct-q4f16_1-MLC';
 
 export const appConfig = {
   appName: 'よりそいAI',
-  appVersion: '0.9.0-phase-b',
+  appVersion: '0.10.0-phase-c',
   aiModelKeys: {
-    default: 'on-device-llama',
+    /** WebLLM / 将来ネイティブで使うモデル ID（秘密ではない） */
+    default: onDeviceModelId,
     grounding: 'optional-cloud-grounding',
   },
   firebase: {
@@ -42,5 +61,13 @@ export const appConfig = {
     functionsRegion,
     configured: firebaseConfigured,
   },
-  aiConnected: firebaseConfigured && aiConnectedFlag,
+  /** 端末内 AI のロード試行（成功したとは限らない） */
+  onDeviceAiEnabled,
+  /**
+   * @deprecated 最終仕様では端末内 AI を見る。旧クラウド接続フラグの別名。
+   * true でも Gemini 未設定なら live にしない（Functions 側 mode:offline）。
+   */
+  aiConnected: legacyCloudAiEnabled,
+  /** 旧 Gemini Functions を明示的に許可するか */
+  legacyCloudAiEnabled,
 } as const;
