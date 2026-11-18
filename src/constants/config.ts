@@ -47,7 +47,7 @@ const onDeviceModelId =
 
 export const appConfig = {
   appName: 'よりそいAI',
-  appVersion: '0.12.0-web-prototype',
+  appVersion: '0.12.1-web-prototype',
   aiModelKeys: {
     /** WebLLM / 将来ネイティブで使うモデル ID（秘密ではない） */
     default: onDeviceModelId,

@@ -52,19 +52,32 @@ npx expo start --web
 
 端末内 AI（WebLLM）も試す場合:
 
+cmd.exe:
+
 ```bat
 set EXPO_PUBLIC_ON_DEVICE_AI=true
 npm run web
 ```
 
+PowerShell:
+
+```powershell
+$env:EXPO_PUBLIC_ON_DEVICE_AI="true"
+npm run web
+```
+
+- フラグを付けても **WebGPU 非対応・モデル取得失敗・初期化失敗**なら **AI未接続／デモ**のままです（`mode: live` にはしません）
+- **画面共有と OCR は AI なしでも動きます**（案内はデモ脚本）。live とデモを混同しないでください
+
 ### Web のハード制限（偽らない）
 
 - **画面共有**は `getDisplayMedia` 対応ブラウザ（Chrome / Edge / Firefox 等）かつ **HTTPS または localhost** が必要
 - 未対応・拒否・終了時は「不可／停止」と表示。動いているように見せない
-- **背面タブでは動かない**（非表示を検知して読み取りを止める）
+- **背面タブでは動かない**（非表示を検知して読み取りを止める）。通知があっても背面 OCR／AI はしません
 - OCR は **Tesseract.js（無料 OSS）**。画像・映像をサーバーへ送らない。フレームは保持しない
+- Tesseract の **言語データ／worker は公式 CDN から取得**します（APIキー不要）。これは画像アップロードではありません
 - WebLLM は WebGPU 等が必要。失敗時は **AI未接続のままデモ**（`mode: live` にしない）
-- 通知はブラウザが許可したときだけ。拒否時は画面内文言
+- 通知は画面の **「通知を許可」** を押したときだけ要求。拒否時は画面内文言のみ
 - **APIキーをフロントに置かない**（端末内／ブラウザ内経路に秘密は不要）
 
 ### 追加依存（無料 OSS）

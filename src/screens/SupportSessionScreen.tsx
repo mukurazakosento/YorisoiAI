@@ -28,8 +28,11 @@ import {
   addEndSupportResponseListener,
   dismissSessionNotifications,
   ensureNotificationPermission,
+  getWebNotificationStatus,
   presentEndSupportNotification,
   presentInstructionNotification,
+  requestWebNotificationPermission,
+  type SessionNotificationPermission,
 } from '../services/notifications';
 import {
   buildGuidanceScript,
@@ -49,7 +52,10 @@ import {
 } from '../services/speech';
 import {
   getWebCaptureSessionState,
+  isMaterialOcrChange,
+  normalizeOcrText,
   pauseWebDisplayShare,
+  rebuildGuidanceFromWebOcr,
   resetWebCaptureSession,
   resumeWebDisplayShare,
   startWebDisplayShare,
@@ -83,7 +89,21 @@ export function SupportSessionScreen({ navigation, route }: Props) {
   const [script, setScript] = useState<SessionScript | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
   const [tone, setTone] = useState<SessionStepTone>('normal');
-  const [notifyHint, setNotifyHint] = useState('通知の準備中…');
+  const [notifyHint, setNotifyHint] = useState(
+    IS_WEB
+      ? '画面の文字で案内します。通知が必要なら「通知を許可」を押してください。'
+      : '通知の準備中…',
+  );
+  const [notifyStatus, setNotifyStatus] = useState<SessionNotificationPermission>(
+    () =>
+      IS_WEB
+        ? getWebNotificationStatus()
+        : {
+            granted: false,
+            canUseOsNotifications: false,
+            detail: '通知の準備中…',
+          },
+  );
   const [capture, setCapture] = useState<CaptureSessionState>(() =>
     getCaptureSessionState(),
   );
@@ -91,7 +111,18 @@ export function SupportSessionScreen({ navigation, route }: Props) {
     getWebCaptureSessionState(),
   );
   const [guidanceBusy, setGuidanceBusy] = useState(false);
+
+  const guidanceBusyRef = useRef(false);
+  const pendingOcrRef = useRef<string | null>(null);
+  const lastNormalizedOcrRef = useRef('');
   const lastAppliedOcrAt = useRef(0);
+  const phaseRef = useRef<SupportSessionPhase>('starting');
+  /** 自動更新で音声を連打しないための抑止フラグ */
+  const skipNextSpeechRef = useRef(false);
+
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
 
   const step = script?.steps[stepIndex];
   const displayText =
@@ -133,8 +164,8 @@ export function SupportSessionScreen({ navigation, route }: Props) {
     return subscribeCaptureSession(setCapture);
   }, []);
 
-  // セッション開始: 端末内AI（未接続時はデモ）＋収録境界＋通知許可
-  // Strict Mode の二重マウントでも startedRef で潰さず、cancelled で完了を無視する
+  // セッション開始: 端末内AI（未接続時はデモ）＋収録境界
+  // Web では通知を自動 request しない
   useEffect(() => {
     let cancelled = false;
 
@@ -148,11 +179,18 @@ export function SupportSessionScreen({ navigation, route }: Props) {
       }
       setScript(guidance.script);
 
-      const permission = await ensureNotificationPermission();
-      if (cancelled) {
-        return;
+      if (IS_WEB) {
+        const status = getWebNotificationStatus();
+        setNotifyStatus(status);
+        setNotifyHint(status.detail);
+      } else {
+        const permission = await ensureNotificationPermission();
+        if (cancelled) {
+          return;
+        }
+        setNotifyStatus(permission);
+        setNotifyHint(permission.detail);
       }
-      setNotifyHint(permission.detail);
       setPhase('guiding');
       setStepIndex(0);
       setTone('normal');
@@ -178,9 +216,15 @@ export function SupportSessionScreen({ navigation, route }: Props) {
     });
   }, [goEndSupport]);
 
-  // 一手ごとに画面文言＋通知＋音声（OCR 確認中は抑止）
+  // 一手ごとに画面文言＋通知＋音声（OCR 確認中・自動更新スキップ時は抑止）
   useEffect(() => {
     if (phase !== 'guiding' || !step || reviewingCapture) {
+      return;
+    }
+
+    if (skipNextSpeechRef.current) {
+      skipNextSpeechRef.current = false;
+      // 画面文言は出す。通知も出さず音声も飛ばして連打を避ける
       return;
     }
 
@@ -245,33 +289,67 @@ export function SupportSessionScreen({ navigation, route }: Props) {
     }
   }, [phase, settings.voiceEnabled, settings.speechRate]);
 
-  const applyOcrTextToGuidance = useCallback(
-    async (ocrText: string) => {
-      const confirmed = ocrText.trim();
-      if (!confirmed || guidanceBusy) {
+  const applyWebOcrText = useCallback(
+    async (rawOcrText: string, options?: { force?: boolean; fromAuto?: boolean }) => {
+      const raw = rawOcrText.trim();
+      if (!raw) {
         return;
       }
+      const normalized = normalizeOcrText(raw);
+      if (
+        !options?.force &&
+        !isMaterialOcrChange(lastNormalizedOcrRef.current, normalized)
+      ) {
+        return;
+      }
+
+      if (guidanceBusyRef.current) {
+        pendingOcrRef.current = raw;
+        return;
+      }
+
+      // offer_end 中の自動更新はしない（できましたフローを壊さない）
+      if (options?.fromAuto && phaseRef.current === 'offer_end') {
+        return;
+      }
+
+      guidanceBusyRef.current = true;
       setGuidanceBusy(true);
       try {
-        const rebuilt = await rebuildGuidanceFromConfirmedFrame({
+        const rebuilt = await rebuildGuidanceFromWebOcr({
           featureId,
           baseSummary: summary,
-          confirmedText: confirmed,
+          rawOcrText: raw,
         });
+        lastNormalizedOcrRef.current = normalizeOcrText(rebuilt.fullMaskedText);
+        lastAppliedOcrAt.current = Date.now();
+        // 自動更新で同じ手順番号に戻るときの音声連打を抑える
+        if (options?.fromAuto) {
+          skipNextSpeechRef.current = true;
+        }
         setScript(rebuilt.script);
         setStepIndex(0);
         setTone('normal');
         setPhase('guiding');
-        setNotifyHint('読み取った文字だけを使って案内を更新しました。');
+        setNotifyHint(
+          rebuilt.wasTruncatedForModel
+            ? '読み取った文字で案内を更新しました（長い文の一部はモデル上限のため省略表示）。'
+            : '読み取った文字だけを使って案内を更新しました。',
+        );
       } finally {
+        guidanceBusyRef.current = false;
         setGuidanceBusy(false);
+        const queued = pendingOcrRef.current;
+        pendingOcrRef.current = null;
+        if (queued) {
+          void applyWebOcrText(queued, { fromAuto: true });
+        }
       }
     },
-    [featureId, summary, guidanceBusy],
+    [featureId, summary],
   );
 
-  // Web: 新しい OCR テキストが来たら、ユーザー確認ボタンでも使えるよう保持。
-  // 自動で案内を差し替え過ぎないよう、明示ボタンを主経路にする。
+  // Web: 約5秒ごとの OCR が実質変化したら、安全なときだけ再解析（最新をキュー）
   useEffect(() => {
     if (!IS_WEB || !webCapture.lastOcr || webCapture.lastOcr.empty) {
       return;
@@ -279,15 +357,18 @@ export function SupportSessionScreen({ navigation, route }: Props) {
     if (webCapture.lastOcr.recognizedAt <= lastAppliedOcrAt.current) {
       return;
     }
-    // 初回の有効 OCR は案内に反映（その後はボタンでも可）
-    if (lastAppliedOcrAt.current === 0) {
+    const text = webCapture.lastOcr.text;
+    const normalized = normalizeOcrText(text);
+    if (!isMaterialOcrChange(lastNormalizedOcrRef.current, normalized)) {
       lastAppliedOcrAt.current = webCapture.lastOcr.recognizedAt;
-      void applyOcrTextToGuidance(webCapture.lastOcr.text);
+      return;
     }
-  }, [webCapture.lastOcr, applyOcrTextToGuidance]);
+    lastAppliedOcrAt.current = webCapture.lastOcr.recognizedAt;
+    void applyWebOcrText(text, { fromAuto: true });
+  }, [webCapture.lastOcr, applyWebOcrText]);
 
   const handleDone = () => {
-    if (!script) {
+    if (!script || guidanceBusyRef.current) {
       return;
     }
     if (stepIndex + 1 >= script.steps.length) {
@@ -358,7 +439,15 @@ export function SupportSessionScreen({ navigation, route }: Props) {
       return;
     }
     lastAppliedOcrAt.current = webCapture.lastOcr?.recognizedAt ?? Date.now();
-    void applyOcrTextToGuidance(text);
+    void applyWebOcrText(text, { force: true });
+  };
+
+  const handleRequestNotify = () => {
+    void (async () => {
+      const status = await requestWebNotificationPermission();
+      setNotifyStatus(status);
+      setNotifyHint(status.detail);
+    })();
   };
 
   const aiStatus = getOnDeviceAiStatus();
@@ -426,6 +515,7 @@ export function SupportSessionScreen({ navigation, route }: Props) {
         <WebCapturePanel
           capture={webCapture}
           aiStatusLabel={aiStatusLabel}
+          notifyStatus={notifyStatus}
           onStartShare={() => {
             void startWebDisplayShare();
           }}
@@ -439,6 +529,7 @@ export function SupportSessionScreen({ navigation, route }: Props) {
             void stopWebDisplayShare();
           }}
           onUseOcrText={handleUseWebOcr}
+          onRequestNotifyPermission={handleRequestNotify}
           guidanceBusy={guidanceBusy}
         />
       ) : null}

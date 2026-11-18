@@ -22,8 +22,12 @@ let videoEl: HTMLVideoElement | null = null;
 let canvasEl: HTMLCanvasElement | null = null;
 let frameTimer: ReturnType<typeof setInterval> | null = null;
 let ocrBusy = false;
+/** OCR 中に次フレーム要求が来たら最新だけ残す */
+let ocrRerunQueued = false;
 let visibilityHandler: (() => void) | null = null;
 let trackEndedHandler: (() => void) | null = null;
+/** start の世代。拒否・停止後の遅延完了を無視 */
+let shareGeneration = 0;
 
 function createInitialState(): WebCaptureSessionState {
   const availability = getWebCaptureAvailability();
@@ -136,15 +140,23 @@ function grabFrameToCanvas(): HTMLCanvasElement | null {
 }
 
 async function runOneOcrPass(): Promise<void> {
-  if (ocrBusy || state.paused || state.tabHidden || !state.sharing) {
+  if (state.paused || state.tabHidden || !state.sharing) {
     return;
   }
+  if (ocrBusy) {
+    // 重複 OCR は走らせず、最新フレームだけ後で取る
+    ocrRerunQueued = true;
+    return;
+  }
+
   const canvas = grabFrameToCanvas();
   if (!canvas) {
     return;
   }
 
   ocrBusy = true;
+  ocrRerunQueued = false;
+  const gen = shareGeneration;
   setState({
     phase: 'ocr',
     statusMessage: '画面の文字を読み取っています（ブラウザ内・送信なし）…',
@@ -153,6 +165,9 @@ async function runOneOcrPass(): Promise<void> {
 
   try {
     const result = await recognizeJapaneseFromCanvas(canvas);
+    if (gen !== shareGeneration || !state.sharing) {
+      return;
+    }
     // キャンバス画素を残さない（次フレームで上書き／停止時に破棄）
     const ctx = canvas.getContext('2d');
     if (ctx) {
@@ -165,22 +180,38 @@ async function runOneOcrPass(): Promise<void> {
       empty: result.empty,
     };
     setState({
-      phase: 'sharing',
+      phase: state.paused || state.tabHidden ? state.phase : 'sharing',
       lastOcr: snapshot,
       statusMessage: result.empty
         ? '文字が見つかりませんでした。共有中の画面を確認してください。'
         : '読み取った文字で案内を更新できます（画像は保持しません）。',
+      errorDetail: null,
     });
   } catch (error) {
+    if (gen !== shareGeneration) {
+      return;
+    }
     const detail =
       error instanceof Error ? error.message : 'OCRに失敗しました';
     setState({
-      phase: 'sharing',
-      statusMessage: '文字の読み取りに失敗しました。共有は続いています。',
+      phase: state.sharing ? 'sharing' : state.phase,
+      statusMessage: detail.includes('もう一度')
+        ? detail
+        : '文字の読み取りに失敗しました。共有は続いています。もう一度試せます。',
       errorDetail: detail,
     });
   } finally {
     ocrBusy = false;
+    if (
+      ocrRerunQueued &&
+      state.sharing &&
+      !state.paused &&
+      !state.tabHidden &&
+      gen === shareGeneration
+    ) {
+      ocrRerunQueued = false;
+      void runOneOcrPass();
+    }
   }
 }
 
@@ -192,19 +223,24 @@ function startFrameLoop(): void {
   }, WEB_FRAME_INTERVAL_MS);
 }
 
-function handleShareEnded(reason: 'ended' | 'hidden'): void {
+function handleRemoteShareEnded(): void {
+  const gen = shareGeneration;
+  shareGeneration += 1;
   clearFrameTimer();
+  detachVisibility();
   stopTracksOnly();
-  const phase: WebSharePhase = reason === 'hidden' ? 'hidden' : 'ended';
+  ocrRerunQueued = false;
+  void terminateOcrWorker();
+  if (gen < 0) {
+    // keep type narrow unused
+  }
   setState({
-    phase,
+    phase: 'ended',
     sharing: false,
     paused: false,
-    tabHidden: reason === 'hidden',
+    tabHidden: false,
     statusMessage:
-      reason === 'hidden'
-        ? 'タブが非表示のため画面共有の処理を止めました。背面では動きません。'
-        : '画面共有が終了しました。必要ならもう一度「画面共有を開始」を押してください。',
+      '画面共有が終了しました。必要ならもう一度「画面共有を開始」を押してください。背面では動きません。',
   });
 }
 
@@ -223,11 +259,20 @@ export async function startWebDisplayShare(): Promise<WebCaptureSessionState> {
     return getWebCaptureSessionState();
   }
 
+  // 既存共有があれば止めてから開始
+  if (state.sharing || mediaStream) {
+    await stopWebDisplayShare();
+  }
+
+  const gen = ++shareGeneration;
+
   setState({
     phase: 'requesting',
     availability,
     statusMessage: '画面共有の許可を待っています…',
     errorDetail: null,
+    lastOcr: null,
+    frameCount: 0,
   });
 
   try {
@@ -235,6 +280,18 @@ export async function startWebDisplayShare(): Promise<WebCaptureSessionState> {
       video: true,
       audio: false,
     });
+
+    if (gen !== shareGeneration) {
+      for (const track of stream.getTracks()) {
+        try {
+          track.stop();
+        } catch {
+          // no-op
+        }
+      }
+      return getWebCaptureSessionState();
+    }
+
     mediaStream = stream;
 
     const video = document.createElement('video');
@@ -242,11 +299,15 @@ export async function startWebDisplayShare(): Promise<WebCaptureSessionState> {
     video.playsInline = true;
     video.srcObject = stream;
     await video.play();
+    if (gen !== shareGeneration) {
+      stopTracksOnly();
+      return getWebCaptureSessionState();
+    }
     videoEl = video;
 
     const [track] = stream.getVideoTracks();
     trackEndedHandler = () => {
-      handleShareEnded('ended');
+      handleRemoteShareEnded();
     };
     if (track) {
       track.addEventListener('ended', trackEndedHandler);
@@ -258,7 +319,9 @@ export async function startWebDisplayShare(): Promise<WebCaptureSessionState> {
       }
       if (document.visibilityState === 'hidden') {
         // 背面では動かないと明示。偽のバックグラウンド処理をしない。
+        // ストリームは維持し、OCR だけ止める（ユーザーが再開できる）
         clearFrameTimer();
+        ocrRerunQueued = false;
         setState({
           tabHidden: true,
           paused: true,
@@ -272,7 +335,7 @@ export async function startWebDisplayShare(): Promise<WebCaptureSessionState> {
         setState({
           tabHidden: false,
           statusMessage:
-            'タブが再表示されました。「再開」で読み取りを続けられます。',
+            'タブが再表示されました。「再開」で読み取りを続けられます。背面OCRは行っていません。',
           phase: 'paused',
           paused: true,
         });
@@ -293,7 +356,11 @@ export async function startWebDisplayShare(): Promise<WebCaptureSessionState> {
     startFrameLoop();
     return getWebCaptureSessionState();
   } catch (error) {
+    if (gen === shareGeneration) {
+      shareGeneration += 1;
+    }
     stopTracksOnly();
+    void terminateOcrWorker();
     const detail =
       error instanceof Error ? error.message : '画面共有を開始できませんでした';
     const denied =
@@ -302,6 +369,8 @@ export async function startWebDisplayShare(): Promise<WebCaptureSessionState> {
     setState({
       phase: 'error',
       sharing: false,
+      paused: false,
+      tabHidden: false,
       statusMessage: denied
         ? '画面共有がキャンセルされました。必要なときにもう一度開始できます。'
         : '画面共有を開始できませんでした。',
@@ -316,6 +385,7 @@ export function pauseWebDisplayShare(): void {
     return;
   }
   clearFrameTimer();
+  ocrRerunQueued = false;
   setState({
     paused: true,
     phase: 'paused',
@@ -324,17 +394,22 @@ export function pauseWebDisplayShare(): void {
 }
 
 export function resumeWebDisplayShare(): void {
-  if (!state.sharing || state.tabHidden) {
-    if (state.tabHidden) {
-      setState({
-        statusMessage:
-          'タブが非表示のときは再開できません。このタブを前面にしてから再開してください。',
-      });
-    }
+  if (!state.sharing) {
+    return;
+  }
+  if (state.tabHidden || (typeof document !== 'undefined' && document.visibilityState === 'hidden')) {
+    setState({
+      tabHidden: true,
+      paused: true,
+      phase: 'hidden',
+      statusMessage:
+        'タブが非表示のときは再開できません。このタブを前面にしてから再開してください。',
+    });
     return;
   }
   setState({
     paused: false,
+    tabHidden: false,
     phase: 'sharing',
     statusMessage: '読み取りを再開しました。',
   });
@@ -342,9 +417,12 @@ export function resumeWebDisplayShare(): void {
 }
 
 export async function stopWebDisplayShare(): Promise<void> {
+  shareGeneration += 1;
   clearFrameTimer();
   detachVisibility();
   stopTracksOnly();
+  ocrBusy = false;
+  ocrRerunQueued = false;
   await terminateOcrWorker();
   const availability = getWebCaptureAvailability();
   setState({
@@ -369,10 +447,12 @@ export async function resetWebCaptureSession(): Promise<void> {
 }
 
 export function resetWebCaptureSessionForTests(): void {
+  shareGeneration += 1;
   clearFrameTimer();
   detachVisibility();
   stopTracksOnly();
   ocrBusy = false;
+  ocrRerunQueued = false;
   state = createInitialState();
   emit();
 }

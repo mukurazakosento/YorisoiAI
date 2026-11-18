@@ -3,17 +3,20 @@ import { StyleSheet, Text, View } from 'react-native';
 import { colors } from '../constants/colors';
 import { baseFontSizes } from '../constants/typography';
 import { useSettings } from '../hooks/useSettings';
+import type { SessionNotificationPermission } from '../services/notifications';
 import type { WebCaptureSessionState } from '../services/webCapture';
 import { PrimaryButton } from './PrimaryButton';
 
 type WebCapturePanelProps = {
   capture: WebCaptureSessionState;
   aiStatusLabel: string;
+  notifyStatus: SessionNotificationPermission;
   onStartShare: () => void;
   onPause: () => void;
   onResume: () => void;
   onStop: () => void;
   onUseOcrText: () => void;
+  onRequestNotifyPermission: () => void;
   guidanceBusy?: boolean;
 };
 
@@ -24,17 +27,20 @@ type WebCapturePanelProps = {
 export function WebCapturePanel({
   capture,
   aiStatusLabel,
+  notifyStatus,
   onStartShare,
   onPause,
   onResume,
   onStop,
   onUseOcrText,
+  onRequestNotifyPermission,
   guidanceBusy = false,
 }: WebCapturePanelProps) {
   const { fontSize } = useSettings();
   const unavailable = !capture.availability.canStartShare;
   const sharing = capture.sharing;
   const ocrPreview = capture.lastOcr?.text?.trim() ?? '';
+  const showNotifyButton = notifyStatus.webPermission === 'default';
 
   return (
     <View style={styles.root}>
@@ -65,6 +71,14 @@ export function WebCapturePanel({
       >
         {capture.statusMessage}
       </Text>
+
+      {showNotifyButton ? (
+        <PrimaryButton
+          label="通知を許可"
+          variant="secondary"
+          onPress={onRequestNotifyPermission}
+        />
+      ) : null}
 
       {unavailable ? (
         <PrimaryButton label="画面共有は使えません" disabled onPress={() => {}} />
