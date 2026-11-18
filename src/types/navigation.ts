@@ -1,3 +1,5 @@
+import type { ClarifyHistoryEntry } from './consultation';
+
 export type FeatureId = 'operationSupport' | 'textExplanation' | 'safetyCheck';
 
 export type RootStackParamList = {
@@ -12,6 +14,8 @@ export type RootStackParamList = {
     text: string;
     choiceLabel?: string;
     clarifyRound: number;
+    /** これまでの質問と答え（アキネーター履歴） */
+    clarifyHistory?: ClarifyHistoryEntry[];
   };
   SupportSession: {
     featureId: FeatureId;

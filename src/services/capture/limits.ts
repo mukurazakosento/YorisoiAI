@@ -14,7 +14,7 @@ export const CAPTURE_OS_LIMITS: CaptureOsLimits = {
   cannot: [
     '他アプリ画面を無言で常時録画・監視すること（サイレントスパイ不可）',
     'ポップアップやダイアログを OS なしで自動検知すること（偽の自動検知もしない）',
-    'Expo Go / Web でライブ画面収録や端末内 OCR を動かすこと',
+    'Expo Go / Web でネイティブのライブ画面収録（Broadcast）や ML Kit OCR を動かすこと',
     '画像・画面映像を外部 AI / Firebase / Storage に送ること',
     '他アプリをアプリ側から自動操作すること',
   ],
@@ -27,7 +27,7 @@ export const CAPTURE_LIMITS_SHORT = {
   cannotOneLiner:
     'ほかのアプリを勝手に見たり、ポップアップを自動で見つけることはできません。',
   expoGoWeb:
-    '画面収録と文字認識は Expo Go / Web では動きません。EAS の development build が必要です。',
+    'ネイティブの画面収録と ML Kit OCR は Expo Go / Web では動きません（EAS development build が必要）。Web 試作は getDisplayMedia＋Tesseract.js の別経路です。',
   broadcastNotLinked:
     'Broadcast Upload（定期フレーム）はまだ組み込んでいません。いまはスクショ選択で読み取ります。',
 } as const;
