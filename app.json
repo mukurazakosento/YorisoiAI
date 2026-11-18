@@ -12,7 +12,11 @@
       "bundleIdentifier": "com.yorisoi.ai",
       "infoPlist": {
         "CFBundleDisplayName": "よりそいAI",
-        "NSPhotoLibraryUsageDescription": "スクリーンショットの文字を端末の中だけで読み取るために、写真ライブラリへのアクセスが必要です。"
+        "NSPhotoLibraryUsageDescription": "スクリーンショットの文字を端末の中だけで読み取るために、写真ライブラリへのアクセスが必要です。",
+        "NSScreenCaptureUsageDescription": "ほかのアプリの画面を、あなたが選んだときだけ読み取りの準備に使うため、画面収録の許可が必要です。映像は端末の外へ送りません。",
+        "UIBackgroundModes": [
+          "screen-capture"
+        ]
       }
     },
     "android": {
@@ -51,7 +55,8 @@
             "useFrameworks": "static"
           }
         }
-      ]
+      ],
+      "./modules/yorisoi-screencapture/plugin/withScreenCaptureBackgroundMode.js"
     ]
   }
 }

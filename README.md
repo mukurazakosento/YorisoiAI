@@ -25,6 +25,7 @@
 | 経路 | 状態 |
 | --- | --- |
 | EAS development build（iPhone 実機） | 利用者がスクショ／写真から画面を選ぶ → **端末内 ML Kit 日本語 OCR** → 確認した文字だけ案内へ |
+| ScreenCaptureKit デモ（iOS 27+） | 設定 →「画面共有デモ」。システム共有ピッカー＋`SCStream` の **frameCount / lastFrameAt 証明**のみ。OCR/AI 非接続。**実機での背面受信は未検証**（Xcode 27 + iOS 27 実機が必要） |
 | Broadcast Upload（定期フレーム） | **未リンク**。サイレント監視はしません |
 | Expo Go / Web | ライブ収録も OCR も **動きません**（不可と明示。偽の成功なし） |
 | 端末内 AI | Phase C どおり。未接続時は **デモ** |
@@ -54,6 +55,18 @@ Expo Go や Web では **使えません**。次が必要です。
 - ほかのアプリの画面を読むには、**利用者が自分で**スクショするか、将来の Broadcast Upload（ユーザー開始の画面収録）が必要です
 - コントロールセンターの画面収録を使っても、この版ではアプリがフレームを自動受信しません（Broadcast 未リンク）
 - Google ML Kit 日本語モデルはシミュレータでは使えないことがあります（実機推奨）
+
+## iOS 27 ScreenCaptureKit デモ（キャプチャ証明のみ）
+
+設定画面の「画面共有デモ（iOS 27）」から開けます。
+
+- モジュール: `modules/yorisoi-screencapture`（Expo Modules + ScreenCaptureKit）
+- 同意: 必ずシステム `SCContentSharingPicker`（スキップしない）
+- 表示: `phase` / `frameCount` / `lastFrameAt`（映像はメモリ上で件数だけ数え、**保存・外部送信しない**）
+- Info: `UIBackgroundModes: screen-capture` と `NSScreenCaptureUsageDescription`
+- 必要: **Xcode 27 SDK** で EAS / ローカル development build、**iOS 27 実機**
+- スコープ外: OCR・AI・通知・音声・ReplayKit Broadcast Upload・Web `getDisplayMedia`
+- 背面でも `frameCount` が増えることの証明は、実機確認後にのみ成功と書いてください
 
 ## iOS でできること / できないこと（正直に）
 
@@ -160,6 +173,7 @@ npm start
 ```bat
 npm run typecheck
 npm run smoke:capture
+npm run smoke:screencapture
 npm run smoke:on-device
 npm run smoke:session
 npm run smoke:speech

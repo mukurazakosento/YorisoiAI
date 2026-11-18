@@ -24,6 +24,7 @@
     "react-native-screens": "~4.30.1",
     "react-native-web": "^0.21.4",
     "yorisoi-mlkit-ocr": "file:./modules/yorisoi-mlkit-ocr",
+    "yorisoi-screencapture": "file:./modules/yorisoi-screencapture",
     "zod": "^4.6.7"
   },
   "devDependencies": {
@@ -44,7 +45,8 @@
     "smoke:speech": "node --import tsx scripts/smoke-speech-phase7.mjs",
     "smoke:session": "node --import tsx scripts/smoke-session-phase-b.mjs",
     "smoke:on-device": "node --import tsx scripts/smoke-on-device-ai-phase-c.mjs",
-    "smoke:capture": "node --import tsx scripts/smoke-capture-phase-d.mjs"
+    "smoke:capture": "node --import tsx scripts/smoke-capture-phase-d.mjs",
+    "smoke:screencapture": "node --import tsx scripts/smoke-screencapture-ios27.mjs"
   },
   "private": true
 }

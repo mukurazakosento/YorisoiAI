@@ -24,4 +24,6 @@ export type RootStackParamList = {
   Settings: undefined;
   Privacy: undefined;
   About: undefined;
+  /** iOS 27 ScreenCaptureKit キャプチャ証明デモ（OCR/AI 非接続） */
+  IosScreenCaptureDemo: undefined;
 };
