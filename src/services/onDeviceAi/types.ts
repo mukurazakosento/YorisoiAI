@@ -31,10 +31,17 @@ export type OnDeviceAiStatus = {
 
 export type OnDeviceAiMode = 'live' | 'demo' | 'offline';
 
+export type ClarifyHistoryEntry = {
+  question: string;
+  answer: string;
+};
+
 export type IntentRequest = {
   featureId: FeatureId;
   text: string;
   choiceLabel?: string;
+  /** アキネーター履歴を踏まえた判定用 */
+  history?: ClarifyHistoryEntry[];
 };
 
 export type IntentResult = {
@@ -49,6 +56,8 @@ export type ClarifyChoicesRequest = {
   text: string;
   choiceLabel?: string;
   clarifyRound: number;
+  /** これまでの質問と答え（ある場合） */
+  history?: ClarifyHistoryEntry[];
 };
 
 export type ClarifyChoicesResult = {

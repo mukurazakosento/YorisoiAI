@@ -59,7 +59,8 @@ assert.doesNotMatch(consultation, /\bScrollView\b/);
 const aiChoice = read('src/screens/AiChoiceScreen.tsx');
 assert.match(aiChoice, /generateClarifyChoices/);
 assert.match(aiChoice, /clarifyChoicesBanner/);
-assert.match(aiChoice, /デモ選択肢/);
+assert.match(aiChoice, /classifyIntent/);
+assert.match(aiChoice, /clarifyHistory/);
 assert.doesNotMatch(aiChoice, /\bScrollView\b/);
 
 const supportSession = read('src/screens/SupportSessionScreen.tsx');

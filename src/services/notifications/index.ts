@@ -55,17 +55,47 @@ async function ensureAndroidChannel(): Promise<void> {
 }
 
 /**
+ * Web Notification API（使える環境のみ）。拒否・未対応時は画面内文言へ。
+ */
+async function ensureWebNotificationPermission(): Promise<SessionNotificationPermission> {
+  if (typeof window === 'undefined' || typeof Notification === 'undefined') {
+    return {
+      granted: false,
+      canUseOsNotifications: false,
+      detail: 'このブラウザは通知に未対応のため、画面の文字で案内します。',
+    };
+  }
+
+  try {
+    let permission = Notification.permission;
+    if (permission === 'default') {
+      permission = await Notification.requestPermission();
+    }
+    const granted = permission === 'granted';
+    return {
+      granted,
+      canUseOsNotifications: granted,
+      detail: granted
+        ? 'ブラウザ通知を使って案内します。'
+        : '通知が許可されていないため、画面の文字で案内します。',
+    };
+  } catch {
+    return {
+      granted: false,
+      canUseOsNotifications: false,
+      detail: '通知を準備できなかったため、画面の文字で案内します。',
+    };
+  }
+}
+
+/**
  * ローカル通知の許可を取る。拒否されても画面内案内は続ける。
  */
 export async function ensureNotificationPermission(): Promise<SessionNotificationPermission> {
   configureNotificationHandler();
 
   if (Platform.OS === 'web') {
-    return {
-      granted: false,
-      canUseOsNotifications: false,
-      detail: 'WebではOS通知を使わず、画面の文字で案内します。',
-    };
+    return ensureWebNotificationPermission();
   }
 
   try {
@@ -110,6 +140,16 @@ export async function presentInstructionNotification(
     return { ok: false, reason: permission.detail };
   }
 
+  if (Platform.OS === 'web') {
+    try {
+      // eslint-disable-next-line no-new
+      new Notification('よりそいAI', { body: text });
+      return { ok: true };
+    } catch {
+      return { ok: false, reason: 'web_notification_failed' };
+    }
+  }
+
   try {
     await Notifications.scheduleNotificationAsync({
       content: {
@@ -137,6 +177,16 @@ export async function presentEndSupportNotification(): Promise<{
   const permission = await ensureNotificationPermission();
   if (!permission.canUseOsNotifications) {
     return { ok: false, reason: permission.detail };
+  }
+
+  if (Platform.OS === 'web') {
+    try {
+      // eslint-disable-next-line no-new
+      new Notification('よりそいAI', { body: END_SUPPORT_DISPLAY });
+      return { ok: true };
+    } catch {
+      return { ok: false, reason: 'web_notification_failed' };
+    }
   }
 
   try {

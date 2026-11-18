@@ -45,9 +45,14 @@ export function classifyIntentStub(input: {
   featureId: FeatureId;
   text: string;
   choiceLabel?: string;
+  history?: { question: string; answer: string }[];
 }): IntentClarity {
   const text = input.text.trim();
   const choice = input.choiceLabel?.trim() ?? '';
+  const historyAnswers = (input.history ?? [])
+    .map((entry) => entry.answer.trim())
+    .filter(Boolean);
+  const combined = [text, choice, ...historyAnswers].join(' ').trim();
 
   if (choice) {
     if (VAGUE_CHOICE_MARKERS.some((marker) => choice.includes(marker))) {
@@ -57,18 +62,18 @@ export function classifyIntentStub(input: {
     return 'clear';
   }
 
-  if (text.length < 4) {
+  if (combined.length < 4) {
     return 'unclear';
   }
 
-  const lower = text.toLowerCase();
+  const lower = combined.toLowerCase();
   const keywords = CLEAR_KEYWORDS[input.featureId];
   if (keywords.some((keyword) => lower.includes(keyword.toLowerCase()))) {
     return 'clear';
   }
 
-  // ある程度長い文でもキーワードが無ければ確認ループへ
-  if (text.length >= 18) {
+  // 履歴が2往復以上ある、または十分長い文なら支援開始可
+  if (historyAnswers.length >= 2 || combined.length >= 18) {
     return 'clear';
   }
 

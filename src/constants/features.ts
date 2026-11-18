@@ -6,7 +6,7 @@ export type FeatureDefinition = {
   description: string;
 };
 
-/** ホーム画面の3機能。文言は最終製品仕様に合わせる。 */
+/** ホーム画面の3機能（大ボタン・ノンスクロール）。 */
 export const FEATURES: FeatureDefinition[] = [
   {
     id: 'operationSupport',
@@ -15,12 +15,12 @@ export const FEATURES: FeatureDefinition[] = [
   },
   {
     id: 'textExplanation',
-    title: '文章説明',
+    title: '文章解説',
     description: '画面の文章の意味を分かりやすく伝えます。',
   },
   {
     id: 'safetyCheck',
-    title: '安全性チェック',
+    title: '危険性通知',
     description: '電話・メールなどの注意点を一緒に確認します。',
   },
 ];

@@ -1,13 +1,15 @@
 import * as Speech from 'expo-speech';
+import { Platform } from 'react-native';
 
 /**
- * 音声案内の境界（Expo Speech / iOS AVSpeechSynthesizer）。
+ * 音声案内の境界（Expo Speech / iOS AVSpeechSynthesizer / Web SpeechSynthesis）。
  * displayText とは別に voiceText を読み上げる。消音でも画面文言は別途必須。
  *
  * 状態: idle / speaking / paused
  * 操作: 開始・一時停止・再開・停止・もう一度聞く
  *
  * pause / resume は iOS・Web 向け。未対応環境では停止＋先頭から再開で代替する。
+ * Web では Expo Speech が SpeechSynthesis を使う（使える環境のみ）。
  */
 
 export type SpeechStatus = 'idle' | 'speaking' | 'paused';
@@ -214,7 +216,17 @@ export async function isSpeakingNow(): Promise<boolean> {
 
 /** 消音・音量の高齢者向け説明（画面上の文字は常に出す前提） */
 export const SPEECH_MUTE_HELP =
-  '音が出ないときは、iPhoneの側面のスイッチ（消音）と側面の音量ボタンを確認してください。消音でも、画面の文字は読めます。';
+  Platform.OS === 'web'
+    ? '音が出ないときは、端末やブラウザの音量を確認してください。音が無くても、画面の文字は読めます。'
+    : '音が出ないときは、iPhoneの側面のスイッチ（消音）と側面の音量ボタンを確認してください。消音でも、画面の文字は読めます。';
 
 export const SPEECH_DISABLED_HELP =
   '音声案内はオフです。聞くときは、設定で「音声案内」をオンにしてください。画面の文字はそのまま読めます。';
+
+/** Web SpeechSynthesis が使えるか（診断用。使えなくても画面文言は出す） */
+export function isWebSpeechSynthesisAvailable(): boolean {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') {
+    return false;
+  }
+  return typeof window.speechSynthesis?.speak === 'function';
+}

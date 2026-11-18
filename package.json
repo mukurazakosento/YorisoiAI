@@ -1,6 +1,6 @@
 {
   "name": "yorisoi-ai",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "main": "index.ts",
   "dependencies": {
     "@expo/metro-runtime": "~58.0.17",
@@ -23,6 +23,7 @@
     "react-native-safe-area-context": "~5.11.1",
     "react-native-screens": "~4.30.1",
     "react-native-web": "^0.21.4",
+    "tesseract.js": "^6.0.1",
     "yorisoi-mlkit-ocr": "file:./modules/yorisoi-mlkit-ocr",
     "zod": "^4.6.7"
   },
@@ -44,7 +45,8 @@
     "smoke:speech": "node --import tsx scripts/smoke-speech-phase7.mjs",
     "smoke:session": "node --import tsx scripts/smoke-session-phase-b.mjs",
     "smoke:on-device": "node --import tsx scripts/smoke-on-device-ai-phase-c.mjs",
-    "smoke:capture": "node --import tsx scripts/smoke-capture-phase-d.mjs"
+    "smoke:capture": "node --import tsx scripts/smoke-capture-phase-d.mjs",
+    "smoke:web": "node --import tsx scripts/smoke-web-prototype.mjs"
   },
   "private": true
 }

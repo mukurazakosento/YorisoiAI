@@ -2,9 +2,20 @@ import type { FeatureId } from '../../types/navigation';
 
 const FEATURE_LABEL: Record<FeatureId, string> = {
   operationSupport: '操作支援',
-  textExplanation: '文章説明',
-  safetyCheck: '安全性チェック',
+  textExplanation: '文章解説',
+  safetyCheck: '危険性通知',
 };
+
+function formatHistory(
+  history?: { question: string; answer: string }[],
+): string {
+  if (!history || history.length === 0) {
+    return '(なし)';
+  }
+  return history
+    .map((entry, index) => `${index + 1}. Q:${entry.question} / A:${entry.answer}`)
+    .join(' | ');
+}
 
 export function buildIntentSystemPrompt(): string {
   return [
@@ -21,11 +32,13 @@ export function buildIntentUserPrompt(input: {
   featureId: FeatureId;
   text: string;
   choiceLabel?: string;
+  history?: { question: string; answer: string }[];
 }): string {
   return [
     `機能: ${FEATURE_LABEL[input.featureId]}`,
     `入力文: ${input.text || '(なし)'}`,
     `選んだ選択肢: ${input.choiceLabel ?? '(なし)'}`,
+    `これまでの確認: ${formatHistory(input.history)}`,
   ].join('\n');
 }
 
@@ -45,12 +58,15 @@ export function buildChoicesUserPrompt(input: {
   text: string;
   choiceLabel?: string;
   clarifyRound: number;
+  history?: { question: string; answer: string }[];
 }): string {
   return [
     `機能: ${FEATURE_LABEL[input.featureId]}`,
     `これまでの文: ${input.text || '(なし)'}`,
     `直前の選択: ${input.choiceLabel ?? '(なし)'}`,
     `確認回数: ${input.clarifyRound}`,
+    `これまでの確認: ${formatHistory(input.history)}`,
+    '直前の答えを踏まえ、まだ曖昧なら別角度の1問と約4選択肢を出してください。',
   ].join('\n');
 }
 
