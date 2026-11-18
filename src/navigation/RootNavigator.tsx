@@ -6,6 +6,7 @@ import { AiChoiceScreen } from '../screens/AiChoiceScreen';
 import { ConsultationScreen } from '../screens/ConsultationScreen';
 import { EndSupportScreen } from '../screens/EndSupportScreen';
 import { HomeScreen } from '../screens/HomeScreen';
+import { IosScreenCaptureDemoScreen } from '../screens/IosScreenCaptureDemoScreen';
 import { PrivacyScreen } from '../screens/PrivacyScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { SupportSessionScreen } from '../screens/SupportSessionScreen';
@@ -33,6 +34,10 @@ export function RootNavigator() {
         <Stack.Screen name="Settings" component={SettingsScreen} />
         <Stack.Screen name="Privacy" component={PrivacyScreen} />
         <Stack.Screen name="About" component={AboutScreen} />
+        <Stack.Screen
+          name="IosScreenCaptureDemo"
+          component={IosScreenCaptureDemoScreen}
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );

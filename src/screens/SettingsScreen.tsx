@@ -83,6 +83,11 @@ export function SettingsScreen({ navigation }: Props) {
 
       <View style={styles.links}>
         <PrimaryButton
+          label="画面共有デモ（iOS 27）"
+          variant="secondary"
+          onPress={() => navigation.navigate('IosScreenCaptureDemo')}
+        />
+        <PrimaryButton
           label="個人情報の取り扱い"
           variant="secondary"
           onPress={() => navigation.navigate('Privacy')}

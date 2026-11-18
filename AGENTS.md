@@ -10,6 +10,7 @@
 - **AI 既定**: 端末内 Llama 系（`src/services/onDeviceAi/`）。Web は WebLLM、ネイティブは llama.cpp / ExecuTorch スキャフォールド
 - 未接続時は明示 **デモ / AI未接続**。`mode: live` はエンジン ready のときだけ
 - **画面フレーム**: `src/services/capture/`（利用者開始のスクショ選択＋端末内 OCR。Broadcast Upload は未リンク）
+- **iOS 27 ScreenCaptureKit デモ**: `modules/yorisoi-screencapture` + `src/services/iosScreenCapture/`（frameCount 証明のみ。OCR/AI 非接続。Web とは分離）
 - OCR: `modules/yorisoi-mlkit-ocr`（ML Kit 日本語・端末内のみ）。確認済みテキストだけ案内へ
 - 旧 `functions/` Gemini Callable は `EXPO_PUBLIC_LEGACY_CLOUD_AI=true` の任意経路（必須にしない）
 - 音声は Expo Speech（`src/services/speech/`）。displayText と voiceText を分離
@@ -30,9 +31,9 @@
 
 ## Layout
 
-`src/{components,screens,navigation,services/{capture,onDeviceAi,ai,ocr,speech,notifications,security,firebase,session},hooks,types,constants,utils,data}`  
+`src/{components,screens,navigation,services/{capture,iosScreenCapture,onDeviceAi,ai,ocr,speech,notifications,security,firebase,session},hooks,types,constants,utils,data}`  
 `functions/src/{ai,shared,...}`（旧 Gemini 経路・任意）  
-`modules/yorisoi-mlkit-ocr/`
+`modules/yorisoi-mlkit-ocr/` / `modules/yorisoi-screencapture/`
 
 ## Phase C / Phase D 画面フロー
 
@@ -43,6 +44,7 @@ Home → Consultation（入力+4択・端末内意図判定）→（不明なら
 ```bat
 npm run typecheck
 npm run smoke:capture
+npm run smoke:screencapture
 npm run smoke:on-device
 npm run smoke:session
 npm run smoke:speech
