@@ -12,6 +12,7 @@ export type AndroidAssistNativeStatus = {
   paused: boolean;
   frameCount: number;
   lastGuidance: string;
+  lastStepId?: string;
   hasOcrText: boolean;
 };
 

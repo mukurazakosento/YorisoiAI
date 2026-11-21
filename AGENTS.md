@@ -47,6 +47,7 @@ Home → Consultation（文字／音声の2択 → 入力・端末内意図判�
 npm run typecheck
 npm run smoke:capture
 npm run smoke:android-assist
+npm run smoke:android-assist-guidance
 npm run smoke:on-device
 npm run smoke:session
 npm run smoke:speech

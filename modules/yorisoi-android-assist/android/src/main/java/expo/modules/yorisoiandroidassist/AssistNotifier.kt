@@ -33,10 +33,19 @@ object AssistNotifier {
     manager.createNotificationChannel(channel)
   }
 
-  fun buildForegroundNotification(context: Context, body: String): Notification {
+  /**
+   * Foreground notification with pause/resume/stop via Service PendingIntents
+   * (does not require bringing the app to the foreground).
+   * Content tap may open the app; action buttons must not depend on that.
+   */
+  fun buildForegroundNotification(
+    context: Context,
+    body: String,
+    paused: Boolean,
+  ): Notification {
     ensureChannel(context)
     val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
-    val pending = if (launch != null) {
+    val contentPending = if (launch != null) {
       PendingIntent.getActivity(
         context,
         0,
@@ -47,14 +56,36 @@ object AssistNotifier {
       null
     }
 
-    return NotificationCompat.Builder(context, CHANNEL_ID)
-      .setContentTitle("よりそいAI（支援中）")
+    val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+      .setContentTitle(if (paused) "よりそいAI（一時停止）" else "よりそいAI（支援中）")
       .setContentText(body)
       .setSmallIcon(android.R.drawable.ic_menu_info_details)
       .setOngoing(true)
-      .setContentIntent(pending)
+      .setContentIntent(contentPending)
       .setOnlyAlertOnce(true)
-      .build()
+      .setCategory(NotificationCompat.CATEGORY_SERVICE)
+
+    if (paused) {
+      builder.addAction(
+        0,
+        "再開",
+        serviceActionPending(context, AssistForegroundService.ACTION_RESUME, 11),
+      )
+    } else {
+      builder.addAction(
+        0,
+        "一時停止",
+        serviceActionPending(context, AssistForegroundService.ACTION_PAUSE, 10),
+      )
+    }
+    // Always allow stop without opening the app.
+    builder.addAction(
+      0,
+      "終了",
+      serviceActionPending(context, AssistForegroundService.ACTION_STOP, 12),
+    )
+
+    return builder.build()
   }
 
   fun showGuidance(context: Context, title: String, body: String) {
@@ -78,6 +109,11 @@ object AssistNotifier {
       .setSmallIcon(android.R.drawable.ic_menu_info_details)
       .setContentIntent(pending)
       .setAutoCancel(true)
+      .addAction(
+        0,
+        "終了",
+        serviceActionPending(context, AssistForegroundService.ACTION_STOP, 13),
+      )
       .build()
     manager.notify(GUIDANCE_ID, notification)
   }
@@ -85,5 +121,22 @@ object AssistNotifier {
   fun cancelGuidance(context: Context) {
     val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     manager.cancel(GUIDANCE_ID)
+  }
+
+  private fun serviceActionPending(
+    context: Context,
+    action: String,
+    requestCode: Int,
+  ): PendingIntent {
+    val intent = Intent(context, AssistForegroundService::class.java).apply {
+      this.action = action
+    }
+    val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    // getForegroundService delivers to the FGS without opening the Activity.
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      PendingIntent.getForegroundService(context, requestCode, intent, flags)
+    } else {
+      PendingIntent.getService(context, requestCode, intent, flags)
+    }
   }
 }

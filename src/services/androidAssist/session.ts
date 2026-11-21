@@ -1,5 +1,8 @@
 import { getAndroidAssistAvailability } from './availability';
-import { buildGuidanceFromOcrText } from './guidanceFromOcr';
+import {
+  buildGuidanceFromOcrText,
+  shouldAnnounceGuidanceStep,
+} from './guidanceFromOcr';
 import type {
   AndroidAssistGuidance,
   AndroidAssistSessionState,
@@ -99,6 +102,11 @@ async function bindNativeEvents(): Promise<void> {
 
   unsubs.push(
     assist.subscribeAndroidAssistOcrChanged((event) => {
+      const previousId = state.lastGuidance?.stepId;
+      // Native already dedupes; keep JS guard so UI/TTS never double-fire same step.
+      if (!shouldAnnounceGuidanceStep(previousId, event.stepId)) {
+        return;
+      }
       const guidance: AndroidAssistGuidance = {
         stepId: event.stepId,
         displayText: event.displayText,

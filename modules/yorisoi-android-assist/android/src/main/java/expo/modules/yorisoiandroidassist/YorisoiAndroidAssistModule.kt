@@ -102,6 +102,7 @@ class YorisoiAndroidAssistModule : Module() {
         "paused" to AssistForegroundService.paused,
         "frameCount" to AssistForegroundService.frameCount,
         "lastGuidance" to AssistForegroundService.lastGuidance,
+        "lastStepId" to AssistForegroundService.lastStepId,
         "hasOcrText" to AssistForegroundService.lastOcrText.isNotBlank(),
       )
     }
