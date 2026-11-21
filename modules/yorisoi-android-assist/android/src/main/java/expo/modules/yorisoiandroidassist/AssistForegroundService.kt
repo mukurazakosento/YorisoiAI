@@ -56,6 +56,10 @@ class AssistForegroundService : Service() {
       private set
 
     @Volatile
+    var lastStepId: String = ""
+      private set
+
+    @Volatile
     var phase: String = "idle"
       private set
 
@@ -68,6 +72,7 @@ class AssistForegroundService : Service() {
       paused = false
       lastOcrText = ""
       lastGuidance = ""
+      lastStepId = ""
       phase = "idle"
       frameCount = 0
     }
@@ -88,6 +93,8 @@ class AssistForegroundService : Service() {
   private var captureWidth = 720
   private var captureHeight = 1280
   private var captureDpi = 320
+  /** Dedupe notify/TTS: only announce when stepId advances. */
+  private var announcedStepId: String = ""
 
   private val loopRunnable = object : Runnable {
     override fun run() {
@@ -120,11 +127,14 @@ class AssistForegroundService : Service() {
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     when (intent?.action) {
       ACTION_PAUSE -> {
-        paused = true
-        phase = "paused"
-        tts?.stop()
-        updateForeground("一時停止中（画面は読み取りません）")
-        YorisoiAndroidAssistModule.emitPhase("paused", null)
+        // Notification action — no need to bring UI to foreground.
+        if (running) {
+          paused = true
+          phase = "paused"
+          tts?.stop()
+          updateForeground("一時停止中（画面は読み取りません）")
+          YorisoiAndroidAssistModule.emitPhase("paused", null)
+        }
         return START_STICKY
       }
       ACTION_RESUME -> {
@@ -179,9 +189,12 @@ class AssistForegroundService : Service() {
     }
 
     AssistNotifier.ensureChannel(this)
+    announcedStepId = ""
+    lastStepId = ""
     val notification = AssistNotifier.buildForegroundNotification(
       this,
       "画面を読み取りながら案内しています（画像は送りません）",
+      paused = false,
     )
     if (Build.VERSION.SDK_INT >= 29) {
       startForeground(
@@ -326,6 +339,12 @@ class AssistForegroundService : Service() {
         goalSummary = goalSummary,
         ocrText = normalized,
       )
+      // OCR noise / same step → do not re-notify or re-speak
+      if (!AssistGuidanceRules.shouldAnnounce(announcedStepId, guidance.stepId)) {
+        return
+      }
+      announcedStepId = guidance.stepId
+      lastStepId = guidance.stepId
       lastGuidance = guidance.displayText
       AssistNotifier.showGuidance(this, "よりそいAI", guidance.displayText)
       if (voiceEnabled) {
@@ -354,7 +373,7 @@ class AssistForegroundService : Service() {
   }
 
   private fun updateForeground(body: String) {
-    val notification = AssistNotifier.buildForegroundNotification(this, body)
+    val notification = AssistNotifier.buildForegroundNotification(this, body, paused)
     val manager = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
     manager.notify(AssistNotifier.FOREGROUND_ID, notification)
   }

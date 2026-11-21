@@ -18,7 +18,12 @@ export type {
 
 export { getAndroidAssistAvailability } from './availability';
 
-export { buildGuidanceFromOcrText } from './guidanceFromOcr';
+export {
+  buildGuidanceFromOcrText,
+  hasClearSentConfirmation,
+  looksLikeLinePhotoGoal,
+  shouldAnnounceGuidanceStep,
+} from './guidanceFromOcr';
 
 export {
   applyOcrTextForTests,

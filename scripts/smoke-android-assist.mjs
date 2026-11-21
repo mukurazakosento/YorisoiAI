@@ -86,6 +86,14 @@ const guidanceNative = read(
 );
 assert.match(guidanceNative, /mode: String = "demo"/);
 assert.match(guidanceNative, /孫|写真|LINE|line/i);
+assert.match(guidanceNative, /looksLikeLinePhotoGoal\(goal\)/);
+assert.match(guidanceNative, /shouldAnnounce/);
+
+const notifier = read(
+  'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistNotifier.kt',
+);
+assert.match(notifier, /getForegroundService|getService/);
+assert.match(notifier, /addAction/);
 
 const consent = read('src/screens/AndroidAssistConsentScreen.tsx');
 assert.doesNotMatch(consent, /\bScrollView\b/);
@@ -130,11 +138,19 @@ assert.match(availability.label, /Android|EAS|不可|Web/);
 const lineGuidance = buildGuidanceFromOcrText({
   featureId: 'operationSupport',
   goalSummary: 'LINEで孫に写真を送りたい',
-  ocrText: 'トーク アルバム 送信',
+  ocrText: 'トーク アルバム',
 });
 assert.equal(lineGuidance.mode, 'demo');
-assert.match(lineGuidance.displayText, /送信|写真|選/);
+assert.match(lineGuidance.displayText, /写真|選|トーク/);
 assert.doesNotMatch(lineGuidance.displayText, /AI稼働|live AI/i);
+
+const wifiNotLine = buildGuidanceFromOcrText({
+  featureId: 'operationSupport',
+  goalSummary: 'Wi-Fiにつなぎたい',
+  ocrText: 'ネットワーク',
+});
+assert.match(wifiNotLine.stepId, /^wifi-/);
+assert.doesNotMatch(wifiNotLine.displayText, /LINE|孫/);
 
 resetAndroidAssistSessionForTests();
 const state = getAndroidAssistSessionState();

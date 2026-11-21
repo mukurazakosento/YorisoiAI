@@ -69,6 +69,7 @@ export function getAndroidAssistNativeStatus(): AndroidAssistNativeStatus {
       paused: false,
       frameCount: 0,
       lastGuidance: '',
+      lastStepId: '',
       hasOcrText: false,
     };
   }
