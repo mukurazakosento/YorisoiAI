@@ -18,16 +18,17 @@
 
 旧 Phase 1〜7（Gemini Callable・手動スクショ OCR 中心）は参考実装として残っていますが、**最終仕様のフローが優先**です。
 
-## いまの実装範囲（Phase D）
+## いまの実装範囲（Android 試作〜11/24 ＋ Phase D）
 
-**画面収録境界＋端末内 OCR の支援セッション配線**まで入りました。正直な稼働状況:
+**Android 優先の APK 試作**と、画面収録境界＋端末内 OCR の支援セッション配線まで入りました。正直な稼働状況:
 
 | 経路 | 状態 |
 | --- | --- |
-| EAS development build（iPhone 実機） | 利用者がスクショ／写真から画面を選ぶ → **端末内 ML Kit 日本語 OCR** → 確認した文字だけ案内へ |
-| Broadcast Upload（定期フレーム） | **未リンク**。サイレント監視はしません |
-| Expo Go / Web | ライブ収録も OCR も **動きません**（不可と明示。偽の成功なし） |
-| 端末内 AI | Phase C どおり。未接続時は **デモ** |
+| EAS preview **APK**（Android 実機） | スクショ／写真選択 → **bundled ML Kit 日本語 OCR**（オフライン可）→ 確認文字だけ案内へ → 音声・ローカル通知 |
+| EAS development build（iPhone 実機） | 同上（iOS ML Kit）。Broadcast は未リンク |
+| MediaProjection / Broadcast 定期フレーム | **未実装／未リンク**。サイレント監視はしません |
+| Expo Go / Web | ライブ収録もネイティブ OCR も **動きません**（不可と明示。偽の成功なし） |
+| 端末内 AI（ネイティブ Llama） | **未接続**。デモ判定・デモ案内を明示（`AI稼働中` にはしません） |
 
 動くもの:
 
@@ -41,19 +42,27 @@
 
 ## 画面収録・OCR の実機での有効化
 
-Expo Go や Web では **使えません**。次が必要です。
+Expo Go や Web では **使えません**。Android は preview APK、iPhone は development build が必要です。
 
-1. Windows から EAS development build を作成して iPhone に入れる（下記）
-2. `npx expo start --dev-client` でそのビルドに接続する
+### Android（推奨・11/24 試作）
+
+1. Windows から EAS で **APK** を作る（下記「EAS preview APK」）
+2. 開発用 Android とおじいちゃん用 Android の **2台に同じ APK** を入れる
 3. 支援セッションで「画面を読み取る」等を押す
-4. iPhone の写真ライブラリから、自分で撮ったスクリーンショットを選ぶ
-5. 読み取った文字を確認・直して「この文字で進む」
+4. 自分で撮ったスクリーンショットを選ぶ → 文字確認 →「この文字で進む」
+5. ネットを切っても OCR・音声・ローカル通知は動く想定（クラウド AI は未接続のまま・デモ明示）
+
+### iPhone
+
+1. Windows から EAS development build を作成して入れる（下記）
+2. `npx expo start --dev-client` でそのビルドに接続する
+3. 支援セッションでスクショ選択 → 確認 → 案内更新
 
 ヒント:
 
-- ほかのアプリの画面を読むには、**利用者が自分で**スクショするか、将来の Broadcast Upload（ユーザー開始の画面収録）が必要です
-- コントロールセンターの画面収録を使っても、この版ではアプリがフレームを自動受信しません（Broadcast 未リンク）
-- Google ML Kit 日本語モデルはシミュレータでは使えないことがあります（実機推奨）
+- ほかのアプリの画面を読むには、**利用者が自分で**スクショする必要があります（MediaProjection / Broadcast は未実装）
+- Google ML Kit 日本語は iOS シミュレータでは使えないことがあります（実機推奨）
+- Android の日本語モデルは **アプリ同梱（bundled）** なので、Play Services の後追いダウンロードに依存しません
 
 ## iOS でできること / できないこと（正直に）
 
@@ -100,7 +109,7 @@ npm start
 | AI（旧経路） | Firebase Cloud Functions + Gemini（`EXPO_PUBLIC_LEGACY_CLOUD_AI=true` のときだけ） |
 | 音声 | Expo Speech（displayText / voiceText 分離） |
 | 通知 | expo-notifications（ローカル通知） |
-| ビルド | Expo EAS Build（iOS development build） |
+| ビルド | Expo EAS Build（Android preview APK / iOS development build） |
 
 ## ディレクトリ構成
 
@@ -136,7 +145,7 @@ modules/yorisoi-mlkit-ocr/
 - [Node.js LTS](https://nodejs.org/)（推奨: 20 以上）
 - Git
 - エディタ: Cursor
-- （実機確認時）Expo アカウント、**Apple Developer Program**、実機 iPhone
+- （実機確認時）Expo アカウント、実機 Android（APK 直入れ）または Apple Developer + iPhone
 
 ### 2. セットアップ
 
@@ -183,17 +192,44 @@ node scripts\smoke-safety-phase6.mjs
 5. Web: 支援セッションで「読み取り不可（Web）」と出ること
 6. 実機（EAS development build）: スクショ選択 → 確認 → 案内更新
 
+## EAS preview APK（Windows から Android 2台）
+
+Google Play 公開は不要です。`eas.json` の `preview`（および同内容の `preview-apk`）は `android.buildType: apk` です。
+
+### 初回に用意するもの（秘密の中身はここに書きません）
+
+1. **Expo アカウント**（[expo.dev](https://expo.dev/)）
+2. 実機 Android **2台**（開発用＋おじいちゃん用）
+3. （初回のみ）EAS が求める Android キーストアは **EAS に管理させる**（パスワードを README に書かない）
+
+```bat
+npx eas-cli login
+npx eas build --platform android --profile preview
+```
+
+ビルド完了後、Expo のビルドページから **APK をダウンロード**し、2台とも同じファイルを入れます。
+
+### Android への入れ方（2台共通）
+
+1. 端末で「提供元不明のアプリ」／「この提供元を許可」をオン（機種により文言が異なります）
+2. APK を開き、インストール
+3. 初回起動で **写真** と **通知** の許可をオン
+4. ホーム → 相談 → 支援セッション → スクショ OCR → 案内 → 音声／通知 → 終了、の流れを確認
+5. **機内モード**にして、OCR・音声・画面内案内がローカルで動くことを確認（クラウド必須機能は「デモ／AI未接続」のまま）
+
+docomo 店頭などオフライン想定: 事前に Wi‑Fi のある場所で APK を入れて一度起動し、許可を済ませておく。日本語 OCR モデルは APK 同梱です。
+
 ## EAS development build（Windows から iPhone 実機）
 
-通知・音声案内・OCR・画面フレーム読み取りを実機で確認するには **EAS development build** を使います。  
+iPhone で通知・音声・OCR を確認するには **EAS development build** を使います。  
 `eas.json` の `development` プロファイルが iOS 実機向けです。
 
 ### 初回に用意するもの（認証情報の中身はここに書きません）
 
-1. **Expo アカウント**（[expo.dev](https://expo.dev/)）
+1. **Expo アカウント**
 2. **Apple Developer Program** への加入
 3. 実機 **iPhone**
-4. （推奨）EAS による **証明書・プロビジョニングプロファイル** の自動管理
+4. （推奨）EAS による証明書・プロビジョニングの自動管理
 
 **パスワード・証明書の中身・`.p12`・API キーを README やソースに書かないでください。**
 
@@ -213,7 +249,7 @@ npx eas build --platform ios --profile development
 npx expo start --dev-client
 ```
 
-### OCR の試し方（実機）
+### OCR の試し方（実機・Android / iPhone 共通）
 
 1. ホーム → いずれかの機能 → 相談 → 支援セッション
 2. （安全性チェックなら）先に電話／メールを開いて「できました」
@@ -224,10 +260,10 @@ npx expo start --dev-client
 ## 後続フェーズ（未実装）
 
 1. ReplayKit Broadcast Upload Extension の本リンク（ユーザー開始の定期フレーム）
-2. ネイティブ端末内 Llama（llama.cpp / ExecuTorch 等）の実リンク
-3. 収録フレームに応じたより動的な次の一手（モデル接続時）
-4. Android OCR の本実装
-5. EAS 実機での通知・音声・OCR 通し検証
+2. Android MediaProjection による定期フレーム（今回はやらない）
+3. ネイティブ端末内 Llama（llama.cpp / ExecuTorch 等）の実リンク
+4. 収録フレームに応じたより動的な次の一手（モデル接続時）
+5. 実機 2 台での通知・音声・OCR 通し検証（mukku- 側）
 
 ## 秘密情報について
 

@@ -60,7 +60,6 @@ export type OcrAvailability = {
   reason?:
     | 'web'
     | 'expo-go-or-missing-native'
-    | 'android-stub'
     | 'simulator'
     | 'ok';
 };
