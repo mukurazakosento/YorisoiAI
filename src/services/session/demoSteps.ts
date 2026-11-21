@@ -34,6 +34,12 @@ function resolveOperationScript(summary: string): SessionScript {
   const n = normalize(summary);
   if (
     (n.includes('line') || n.includes('ライン') || n.includes('らいん')) &&
+    (n.includes('写真') || n.includes('画像') || n.includes('孫') || n.includes('送'))
+  ) {
+    return LINE_SEND_PHOTO;
+  }
+  if (
+    (n.includes('line') || n.includes('ライン') || n.includes('らいん')) &&
     (n.includes('通知') || n.includes('届かない') || n.includes('使い方'))
   ) {
     return LINE_NOTIFY;
@@ -92,6 +98,51 @@ function resolveSafetyScript(summary: string): SessionScript {
 function normalize(text: string): string {
   return text.replace(/\s+/g, '').toLowerCase();
 }
+
+/** 優先シナリオ: LINE で孫に写真を送る（初期脚本。背面 OCR 変化で上書きされ得る） */
+const LINE_SEND_PHOTO: SessionScript = {
+  id: 'op-line-send-photo',
+  title: 'LINEで写真を送る',
+  isDemo: DEMO,
+  steps: [
+    {
+      displayText: 'まず、緑のLINEアプリを開いてください。',
+      voiceText:
+        'まず、ホーム画面から緑のLINEアプリを開いてください。開けたら「できました」を押してくださいね。',
+      simplifyDisplayText: '緑のLINEを開きます。',
+      simplifyVoiceText:
+        '緑の四角いLINEのマークを探して押してください。',
+    },
+    {
+      displayText: '孫の名前のトークを開いてください。',
+      voiceText:
+        '友だち一覧から、孫の名前を選んでトークを開いてください。開けたら「できました」です。',
+      simplifyDisplayText: '孫の名前を押します。',
+      simplifyVoiceText: '孫の名前を探して押してください。',
+    },
+    {
+      displayText: '写真を付けるボタン（＋など）を押してください。',
+      voiceText:
+        'トーク画面の下のほうにある、プラスや写真のボタンを押してください。よりそいAIは代わりに押しません。',
+      simplifyDisplayText: 'プラスや写真のボタンを押します。',
+      simplifyVoiceText: '下のプラスや写真のマークを押してください。',
+    },
+    {
+      displayText: '送りたい写真を一つ選んでください。',
+      voiceText:
+        'アルバムから送りたい写真を一つだけ選んでください。選んだら「できました」です。',
+      simplifyDisplayText: '写真を一つ選びます。',
+      simplifyVoiceText: '送りたい写真を一つだけ選んでください。',
+    },
+    {
+      displayText: '内容を確かめてから「送信」を押してください。',
+      voiceText:
+        '相手と写真を確かめてから、送信を押してください。勝手には送りません。',
+      simplifyDisplayText: '確かめてから送信します。',
+      simplifyVoiceText: '大丈夫なら送信を押してください。',
+    },
+  ],
+};
 
 const LINE_NOTIFY: SessionScript = {
   id: 'op-line-notify',

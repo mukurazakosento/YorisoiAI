@@ -1,6 +1,6 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AppHeader } from '../components/AppHeader';
 import { PrimaryButton } from '../components/PrimaryButton';
@@ -10,6 +10,15 @@ import { colors } from '../constants/colors';
 import { getFeatureById } from '../constants/features';
 import { baseFontSizes } from '../constants/typography';
 import { useSettings } from '../hooks/useSettings';
+import {
+  getAndroidAssistSessionState,
+  pauseAndroidAssistSession,
+  resumeAndroidAssistSession,
+  startAndroidAssistSession,
+  stopAndroidAssistSession,
+  subscribeAndroidAssistSession,
+  type AndroidAssistSessionState,
+} from '../services/androidAssist';
 import {
   clearFrameDraft,
   confirmFrameText,
@@ -56,10 +65,11 @@ type Props = NativeStackScreenProps<RootStackParamList, 'SupportSession'>;
 /**
  * 支援セッション: start → guiding（一手ずつ）→ offer_end → EndSupport。
  * Phase D: 利用者開始のフレーム取り込み＋端末内 OCR（確認済み文字のみ案内へ）。
+ * Android: 任意で MediaProjection 背面支援（同意済みのときのみ）。
  * スクロール禁止。消音でも画面の displayText は必ず出す。
  */
 export function SupportSessionScreen({ navigation, route }: Props) {
-  const { featureId, summary } = route.params;
+  const { featureId, summary, backgroundAssist } = route.params;
   const feature = getFeatureById(featureId);
   const { fontSize, settings } = useSettings();
 
@@ -71,8 +81,12 @@ export function SupportSessionScreen({ navigation, route }: Props) {
   const [capture, setCapture] = useState<CaptureSessionState>(() =>
     getCaptureSessionState(),
   );
+  const [androidAssist, setAndroidAssist] = useState<AndroidAssistSessionState>(
+    () => getAndroidAssistSessionState(),
+  );
   const [guidanceBusy, setGuidanceBusy] = useState(false);
   const startedRef = useRef(false);
+  const wantsBackgroundAssist = backgroundAssist === true;
 
   const step = script?.steps[stepIndex];
   const displayText =
@@ -97,6 +111,7 @@ export function SupportSessionScreen({ navigation, route }: Props) {
     void stopSpeaking().catch(() => {
       // no-op
     });
+    void stopAndroidAssistSession();
     stopCaptureSession();
     void dismissSessionNotifications();
     navigation.navigate('EndSupport', { featureId, summary });
@@ -106,7 +121,35 @@ export function SupportSessionScreen({ navigation, route }: Props) {
     return subscribeCaptureSession(setCapture);
   }, []);
 
-  // セッション開始: 端末内AI（未接続時はデモ）＋収録境界＋通知許可
+  useEffect(() => {
+    return subscribeAndroidAssistSession(setAndroidAssist);
+  }, []);
+
+  // 背面支援の OCR 変化 → 画面の一手を更新（ネイティブ通知/TTS と併用。デモ明示）
+  useEffect(() => {
+    const g = androidAssist.lastGuidance;
+    if (!g || phase !== 'guiding') {
+      return;
+    }
+    setScript({
+      id: `android-assist-${g.stepId}`,
+      title: '背面支援の案内',
+      isDemo: true,
+      steps: [
+        {
+          displayText: g.displayText,
+          voiceText: g.voiceText,
+          simplifyDisplayText: g.displayText,
+          simplifyVoiceText: g.voiceText,
+        },
+      ],
+    });
+    setStepIndex(0);
+    setTone('normal');
+    setNotifyHint('背面支援が案内を更新しました（デモ判定）。');
+  }, [androidAssist.lastGuidance, phase]);
+
+  // セッション開始: 端末内AI（未接続時はデモ）＋収録境界＋通知許可＋任意の背面支援
   useEffect(() => {
     if (startedRef.current) {
       return;
@@ -120,6 +163,21 @@ export function SupportSessionScreen({ navigation, route }: Props) {
 
       const permission = await ensureNotificationPermission();
       setNotifyHint(permission.detail);
+
+      if (wantsBackgroundAssist) {
+        const assistState = await startAndroidAssistSession({
+          featureId,
+          goalSummary: summary,
+          voiceEnabled: settings.voiceEnabled,
+          intervalMs: 3000,
+        });
+        if (assistState.phase === 'running') {
+          setNotifyHint('背面支援を開始しました。他のアプリへ切り替えてください。');
+        } else if (assistState.statusMessage) {
+          setNotifyHint(assistState.statusMessage);
+        }
+      }
+
       setPhase('guiding');
       setStepIndex(0);
       setTone('normal');
@@ -129,10 +187,11 @@ export function SupportSessionScreen({ navigation, route }: Props) {
       void stopSpeaking().catch(() => {
         // no-op
       });
+      void stopAndroidAssistSession();
       stopCaptureSession();
       void dismissSessionNotifications();
     };
-  }, [featureId, summary]);
+  }, [featureId, summary, wantsBackgroundAssist, settings.voiceEnabled]);
 
   useEffect(() => {
     return addEndSupportResponseListener(() => {
@@ -292,6 +351,7 @@ export function SupportSessionScreen({ navigation, route }: Props) {
           void stopSpeaking().catch(() => {
             // no-op
           });
+          void stopAndroidAssistSession();
           stopCaptureSession();
           navigation.goBack();
         }}
@@ -319,6 +379,51 @@ export function SupportSessionScreen({ navigation, route }: Props) {
           {stepLabel}
         </Text>
       </View>
+
+      {wantsBackgroundAssist && androidAssist.phase !== 'unavailable' ? (
+        <View style={styles.assistRow}>
+          <Text
+            style={[styles.assistLabel, { fontSize: fontSize(baseFontSizes.caption) }]}
+            numberOfLines={1}
+          >
+            {androidAssist.phase === 'running'
+              ? `背面支援中（${androidAssist.frameCount}）`
+              : androidAssist.phase === 'paused'
+                ? '背面支援：一時停止'
+                : androidAssist.phase === 'requesting'
+                  ? '画面共有の許可…'
+                  : androidAssist.statusMessage ?? '背面支援'}
+          </Text>
+          {androidAssist.phase === 'running' ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                void pauseAndroidAssistSession();
+              }}
+            >
+              <Text
+                style={[styles.assistAction, { fontSize: fontSize(baseFontSizes.caption) }]}
+              >
+                一時停止
+              </Text>
+            </Pressable>
+          ) : null}
+          {androidAssist.phase === 'paused' ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                void resumeAndroidAssistSession();
+              }}
+            >
+              <Text
+                style={[styles.assistAction, { fontSize: fontSize(baseFontSizes.caption) }]}
+              >
+                再開
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
 
       {phase !== 'starting' ? (
         <SessionCapturePanel
@@ -436,6 +541,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
+  },
+  assistRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  assistLabel: {
+    flex: 1,
+    color: colors.primary,
+    fontWeight: '700',
+  },
+  assistAction: {
+    color: colors.primary,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
   },
   featureLabel: {
     color: colors.primary,

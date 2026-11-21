@@ -3,6 +3,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { AboutScreen } from '../screens/AboutScreen';
 import { AiChoiceScreen } from '../screens/AiChoiceScreen';
+import { AndroidAssistConsentScreen } from '../screens/AndroidAssistConsentScreen';
 import { ConsultationScreen } from '../screens/ConsultationScreen';
 import { EndSupportScreen } from '../screens/EndSupportScreen';
 import { HomeScreen } from '../screens/HomeScreen';
@@ -28,6 +29,10 @@ export function RootNavigator() {
         <Stack.Screen name="Home" component={HomeScreen} />
         <Stack.Screen name="Consultation" component={ConsultationScreen} />
         <Stack.Screen name="AiChoice" component={AiChoiceScreen} />
+        <Stack.Screen
+          name="AndroidAssistConsent"
+          component={AndroidAssistConsentScreen}
+        />
         <Stack.Screen name="SupportSession" component={SupportSessionScreen} />
         <Stack.Screen name="EndSupport" component={EndSupportScreen} />
         <Stack.Screen name="Settings" component={SettingsScreen} />

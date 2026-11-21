@@ -1,0 +1,22 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.yorisoiandroidassist'
+version = '0.1.0'
+
+android {
+  namespace "expo.modules.yorisoiandroidassist"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+    minSdkVersion 24
+  }
+}
+
+dependencies {
+  // Same bundled Japanese model family as yorisoi-mlkit-ocr (no second OCR Expo module).
+  implementation 'com.google.mlkit:text-recognition-japanese:16.0.1'
+  implementation 'androidx.core:core-ktx:1.13.1'
+}
