@@ -29,7 +29,7 @@ export function demoGenerateClarifyChoices(
   return {
     choices,
     mode: 'demo',
-    question: 'もう少し具体的に教えてください。下のどれかに近いですか？',
+    question: 'どれに近いですか？',
   };
 }
 

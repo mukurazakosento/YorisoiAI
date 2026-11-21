@@ -11,7 +11,7 @@
 | 項目 | 内容 |
 | --- | --- |
 | AI | **端末内 Llama / WebLLM 系**が既定。クラウド Gemini は必須にしない |
-| 支援の流れ | 相談（入力＋約4選択肢）→ 意図が不明なら選択肢画面を繰り返す → **支援セッション** |
+| 支援の流れ | 相談（**文字で入力 / 音声で入力**）→ 意図が曖昧なときだけ選択肢 → **支援セッション** |
 | 支援セッション | 利用者開始の画面フレーム → 端末内 OCR → **通知＋音声**で一つずつ案内 |
 | 終了 | 通知「ここをタップで支援を終了」→ **解決した / 解決しなかった** → 再相談可 |
 | プライバシー | 画像・画面映像は外部 AI に送らない（端末内 AI にも画像を渡さない） |
@@ -33,7 +33,8 @@
 動くもの:
 
 - ホーム（左「よりそいAI」・右設定・3ボタン）
-- 相談開始 → 端末内 `classifyIntent`（未接続時はヒューリスティック・**デモ**明示）
+- 相談開始（文字／音声の2択）→ 端末内 `classifyIntent`（未接続時はヒューリスティック・**デモ**明示）。曖昧なときだけ追加の選択肢
+- 音声入力は **EAS development build / APK** 向け（Expo Go では不可と明示。文字入力へ誘導）
 - 支援セッション: **start → guiding → offer end → EndSupport**
 - **操作支援**: 「画面を読み取る」→ 確認済み文字で次の一手を組み直し
 - **安全性チェック**: 電話／メールを開いたあと「画面の文字を調べる」（先に開く導線）
@@ -82,6 +83,18 @@ Expo Go や Web では **使えません**。Android は preview APK、iPhone �
 - 他アプリをアプリ側から自動操作すること
 - 断定的な「安全です」と表示すること
 
+## 音声入力について（正直な稼働）
+
+相談画面の「音声で入力」は `expo-speech-recognition` を使います。
+
+| 環境 | 状態 |
+| --- | --- |
+| EAS development build / preview APK | 端末の音声認識が使える場合あり（マイク・認識の許可が必要） |
+| Expo Go | **動きません**（ネイティブモジュール未同梱）。画面で不可と明示し、文字入力へ誘導 |
+| Web | ブラウザの SpeechRecognition 対応時のみ。未対応なら文字入力へ |
+
+認識結果は必ず確認・修正できます。読み上げ（Expo Speech）とは別機能です。
+
 ## 端末内 AI の試し方（Web）
 
 ```bat
@@ -107,7 +120,7 @@ npm start
 | 画面フレーム | `src/services/capture`（利用者開始・確認済み文字のみ） |
 | OCR | Google ML Kit 日本語（`modules/yorisoi-mlkit-ocr`、端末内のみ） |
 | AI（旧経路） | Firebase Cloud Functions + Gemini（`EXPO_PUBLIC_LEGACY_CLOUD_AI=true` のときだけ） |
-| 音声 | Expo Speech（displayText / voiceText 分離） |
+| 音声 | Expo Speech（読み上げ）＋ expo-speech-recognition（音声入力）。displayText / voiceText 分離 |
 | 通知 | expo-notifications（ローカル通知） |
 | ビルド | Expo EAS Build（Android preview APK / iOS development build） |
 
