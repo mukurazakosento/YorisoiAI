@@ -40,7 +40,6 @@ import {
 } from '../services/session/demoSteps';
 import {
   SPEECH_DISABLED_HELP,
-  SPEECH_MUTE_HELP,
   replaySpeaking,
   speak,
   stopSpeaking,
@@ -279,15 +278,15 @@ export function SupportSessionScreen({ navigation, route }: Props) {
   const aiDemo = !isOnDeviceAiReady() || script?.isDemo !== false;
   const stepLabel =
     script && phase === 'guiding'
-      ? `いまの手順 ${stepIndex + 1} / ${script.steps.length}`
+      ? `次の一手（${stepIndex + 1}/${script.steps.length}）`
       : phase === 'offer_end'
-        ? '案内はひととおり終わりです'
-        : '準備しています…';
+        ? '案内は終わりです'
+        : '準備中…';
 
   return (
     <Screen contentStyle={styles.content}>
       <AppHeader
-        title="支援セッション"
+        title={feature.title}
         showBack
         onPressBack={() => {
           void stopSpeaking().catch(() => {
@@ -299,27 +298,27 @@ export function SupportSessionScreen({ navigation, route }: Props) {
       />
 
       <View style={styles.metaRow}>
-        <Text
-          style={[styles.featureLabel, { fontSize: fontSize(baseFontSizes.caption) }]}
-          numberOfLines={1}
-        >
-          {feature.title}
-        </Text>
         {aiDemo ? (
           <Text
             style={[styles.demoBadge, { fontSize: fontSize(baseFontSizes.caption) }]}
           >
             デモ
           </Text>
-        ) : null}
+        ) : (
+          <Text
+            style={[styles.featureLabel, { fontSize: fontSize(baseFontSizes.caption) }]}
+            numberOfLines={1}
+          >
+            案内
+          </Text>
+        )}
+        <Text
+          style={[styles.stepLabel, { fontSize: fontSize(baseFontSizes.caption) }]}
+          numberOfLines={1}
+        >
+          {stepLabel}
+        </Text>
       </View>
-
-      <Text
-        style={[styles.summary, { fontSize: fontSize(baseFontSizes.caption) }]}
-        numberOfLines={1}
-      >
-        {summary}
-      </Text>
 
       {phase !== 'starting' ? (
         <SessionCapturePanel
@@ -338,42 +337,38 @@ export function SupportSessionScreen({ navigation, route }: Props) {
       ) : null}
 
       {!reviewingCapture ? (
-        <>
+        <View style={styles.instructionCard}>
           <Text
-            style={[styles.stepLabel, { fontSize: fontSize(baseFontSizes.caption) }]}
+            style={[
+              styles.displayText,
+              { fontSize: fontSize(baseFontSizes.title) },
+            ]}
+            numberOfLines={3}
+            accessibilityRole="header"
           >
-            {stepLabel}
+            {phase === 'offer_end'
+              ? END_SUPPORT_DISPLAY
+              : phase === 'starting'
+                ? '案内を準備しています…'
+                : displayText}
           </Text>
-
-          <View style={styles.instructionCard}>
-            <Text
-              style={[
-                styles.displayText,
-                { fontSize: fontSize(baseFontSizes.title) },
-              ]}
-              numberOfLines={3}
-              accessibilityRole="header"
-            >
-              {phase === 'offer_end'
-                ? END_SUPPORT_DISPLAY
-                : phase === 'starting'
-                  ? '案内を準備しています…'
-                  : displayText}
-            </Text>
-            <Text
-              style={[styles.notifyHint, { fontSize: fontSize(baseFontSizes.caption) }]}
-              numberOfLines={2}
-            >
-              {notifyHint}
-            </Text>
+          {!settings.voiceEnabled ? (
             <Text
               style={[styles.muteHint, { fontSize: fontSize(baseFontSizes.caption) }]}
               numberOfLines={1}
             >
-              {settings.voiceEnabled ? SPEECH_MUTE_HELP : SPEECH_DISABLED_HELP}
+              {SPEECH_DISABLED_HELP}
             </Text>
-          </View>
-        </>
+          ) : null}
+          {notifyHint && !notifyHint.startsWith('通知の準備') ? (
+            <Text
+              style={[styles.notifyHint, { fontSize: fontSize(baseFontSizes.caption) }]}
+              numberOfLines={1}
+            >
+              {notifyHint}
+            </Text>
+          ) : null}
+        </View>
       ) : null}
 
       <View style={styles.actions}>
@@ -402,7 +397,7 @@ export function SupportSessionScreen({ navigation, route }: Props) {
               </View>
             </View>
             <PrimaryButton
-              label="支援を終了する"
+              label="終了する"
               variant="secondary"
               onPress={goEndSupport}
             />
@@ -434,7 +429,7 @@ export function SupportSessionScreen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
   content: {
-    gap: 6,
+    gap: 8,
   },
   metaRow: {
     flexDirection: 'row',
@@ -445,19 +440,15 @@ const styles = StyleSheet.create({
   featureLabel: {
     color: colors.primary,
     fontWeight: '700',
-    flex: 1,
   },
   demoBadge: {
     color: colors.warning,
     fontWeight: '700',
   },
-  summary: {
-    color: colors.textSecondary,
-    lineHeight: 20,
-  },
   stepLabel: {
     color: colors.textMuted,
     fontWeight: '700',
+    flexShrink: 1,
   },
   instructionCard: {
     flex: 1,
@@ -466,26 +457,26 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 8,
     justifyContent: 'center',
   },
   displayText: {
     color: colors.text,
     fontWeight: '700',
-    lineHeight: 30,
+    lineHeight: 34,
   },
   notifyHint: {
     color: colors.textSecondary,
-    lineHeight: 20,
+    lineHeight: 22,
   },
   muteHint: {
     color: colors.textMuted,
-    lineHeight: 20,
+    lineHeight: 22,
   },
   actions: {
-    gap: 6,
+    gap: 8,
     paddingBottom: 2,
   },
   secondaryRow: {

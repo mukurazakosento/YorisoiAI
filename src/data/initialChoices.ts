@@ -2,7 +2,9 @@ import type { ConsultationChoice } from '../types/consultation';
 import type { FeatureId } from '../types/navigation';
 
 /**
- * 相談開始画面の固定選択肢（約4つ・スクロールなしで同時表示）。
+ * 旧・相談開始の固定4択。UI簡素化後は最初の画面では使わない。
+ * 曖昧時の確認は `demoClarifyChoices` / 端末内 AI 生成を使う。
+ * 互換・参照用に残す。
  */
 export const INITIAL_CHOICES: Record<FeatureId, ConsultationChoice[]> = {
   operationSupport: [

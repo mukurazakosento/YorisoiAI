@@ -27,16 +27,17 @@ export function EndSupportScreen({ navigation, route }: Props) {
 
       <View style={styles.main}>
         <Text
-          style={[styles.lead, { fontSize: fontSize(baseFontSizes.bodyLarge) }]}
+          style={[styles.lead, { fontSize: fontSize(baseFontSizes.title) }]}
           numberOfLines={2}
+          accessibilityRole="header"
         >
-          問題は解決しましたか？
+          解決しましたか？
         </Text>
         <Text
           style={[styles.summary, { fontSize: fontSize(baseFontSizes.body) }]}
-          numberOfLines={3}
+          numberOfLines={2}
         >
-          {feature.title}：{summary}
+          {feature.title}
         </Text>
       </View>
 

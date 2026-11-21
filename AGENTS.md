@@ -36,7 +36,7 @@
 
 ## Phase C / Phase D 画面フロー
 
-Home → Consultation（入力+4択・端末内意図判定）→（不明なら）AiChoice → SupportSession（Phase C: 端末内AI案内 / Phase D: 収録境界＋都度 OCR → guiding → offer_end）→ EndSupport
+Home → Consultation（文字／音声の2択 → 入力・端末内意図判定）→（曖昧なときだけ）AiChoice → SupportSession（Phase C: 端末内AI案内 / Phase D: 収録境界＋都度 OCR → guiding → offer_end）→ EndSupport
 
 ## Checks
 

@@ -1,34 +1,136 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { useSpeechRecognitionEvent } from 'expo-speech-recognition';
 
 import { AppHeader } from '../components/AppHeader';
-import { ChoiceButton } from '../components/ChoiceButton';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { Screen } from '../components/Screen';
 import { TextInputField } from '../components/TextInputField';
 import { colors } from '../constants/colors';
 import { getFeatureById } from '../constants/features';
 import { baseFontSizes } from '../constants/typography';
-import { INITIAL_CHOICES } from '../data/initialChoices';
 import { useSettings } from '../hooks/useSettings';
 import { classifyIntent, isOnDeviceAiReady } from '../services/onDeviceAi';
+import {
+  abortSpeechRecognition,
+  getSpeechRecognitionAvailability,
+  startSpeechRecognition,
+  stopSpeechRecognition,
+  transcriptFromResultEvent,
+} from '../services/speech/recognition';
 import type { RootStackParamList } from '../types/navigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Consultation'>;
 
+type InputMethod = 'pick' | 'text' | 'voice';
+
 /**
- * 相談開始画面: 入力欄 + 約4選択肢をスクロールなしで同時表示。
- * 意図が明確なら支援セッションへ、不明なら AI 選択肢画面へ。
- * 端末内 AI（WebLLM 等）が未接続のときは明示デモ判定。
+ * 相談開始: 最初は「文字で入力」「音声で入力」の2択のみ。
+ * 固定の大量選択肢は出さない。意図が明確なら支援へ、曖昧なら AiChoice。
+ * 端末内 AI 未接続時は明示デモ判定。
  */
 export function ConsultationScreen({ navigation, route }: Props) {
   const { featureId, presetText } = route.params;
   const feature = getFeatureById(featureId);
-  const choices = useMemo(() => INITIAL_CHOICES[featureId].slice(0, 4), [featureId]);
   const { fontSize } = useSettings();
+
+  const [method, setMethod] = useState<InputMethod>(() =>
+    presetText?.trim() ? 'text' : 'pick',
+  );
   const [inputText, setInputText] = useState(presetText ?? '');
   const [busy, setBusy] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [voiceHint, setVoiceHint] = useState(() => {
+    const availability = getSpeechRecognitionAvailability();
+    return availability.usable ? '' : availability.detail;
+  });
+
+  useSpeechRecognitionEvent('start', () => {
+    setListening(true);
+  });
+  useSpeechRecognitionEvent('end', () => {
+    setListening(false);
+  });
+  useSpeechRecognitionEvent('result', (event) => {
+    const next = transcriptFromResultEvent(event);
+    if (next) {
+      setInputText(next);
+    }
+  });
+  useSpeechRecognitionEvent('error', (event) => {
+    setListening(false);
+    const message = event.message?.trim();
+    setVoiceHint(
+      message && message.length > 0
+        ? `聞き取りできませんでした。文字で直せます。（${message}）`
+        : '聞き取りできませんでした。文字で直せます。',
+    );
+  });
+
+  useEffect(() => {
+    return () => {
+      abortSpeechRecognition();
+    };
+  }, []);
+
+  const proceed = async (text: string) => {
+    if (busy) {
+      return;
+    }
+    const trimmed = text.trim();
+    if (!trimmed) {
+      return;
+    }
+    setBusy(true);
+    abortSpeechRecognition();
+    try {
+      const result = await classifyIntent({ featureId, text: trimmed });
+
+      if (result.clarity === 'unclear') {
+        navigation.navigate('AiChoice', {
+          featureId,
+          text: trimmed,
+          clarifyRound: 1,
+        });
+        return;
+      }
+
+      navigation.navigate('SupportSession', {
+        featureId,
+        summary: trimmed,
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const canSubmit = inputText.trim().length > 0 && !busy;
+  const demoHint = !isOnDeviceAiReady();
+
+  const goPick = () => {
+    abortSpeechRecognition();
+    setListening(false);
+    setMethod('pick');
+  };
+
+  const startListening = () => {
+    void (async () => {
+      const result = await startSpeechRecognition();
+      if (!result.ok) {
+        setVoiceHint(result.detail);
+        setListening(false);
+        return;
+      }
+      setVoiceHint('話してください。終わったら「聞き取りを止める」を押します。');
+    })();
+  };
+
+  const stopListening = () => {
+    stopSpeechRecognition();
+    setListening(false);
+    setVoiceHint('文字を確認して、直してから進んでください。');
+  };
 
   const inputLabel =
     featureId === 'textExplanation'
@@ -44,127 +146,164 @@ export function ConsultationScreen({ navigation, route }: Props) {
         ? '例：知らない番号から電話があった'
         : '例：LINEの通知が来ない';
 
-  const proceed = async (text: string, choiceLabel?: string) => {
-    if (busy) {
-      return;
-    }
-    setBusy(true);
-    try {
-      const result = await classifyIntent({ featureId, text, choiceLabel });
-      const summary = [choiceLabel, text].filter(Boolean).join(' / ');
-
-      if (result.clarity === 'unclear') {
-        navigation.navigate('AiChoice', {
-          featureId,
-          text,
-          choiceLabel,
-          clarifyRound: 1,
-        });
-        return;
-      }
-
-      navigation.navigate('SupportSession', {
-        featureId,
-        summary: summary || feature.title,
-      });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const canSubmit = inputText.trim().length > 0 && !busy;
-  const demoHint = !isOnDeviceAiReady();
-
   return (
     <Screen contentStyle={styles.content}>
       <AppHeader
         title={feature.title}
         showBack
-        onPressBack={() => navigation.goBack()}
+        onPressBack={() => {
+          if (method === 'pick') {
+            navigation.goBack();
+            return;
+          }
+          goPick();
+        }}
       />
-
-      <Text
-        style={[styles.lead, { fontSize: fontSize(baseFontSizes.body) }]}
-        numberOfLines={2}
-      >
-        文章を書くか、下のどれかを押してください。
-      </Text>
 
       {demoHint ? (
         <Text
           style={[styles.demoHint, { fontSize: fontSize(baseFontSizes.caption) }]}
           numberOfLines={1}
         >
-          AI未接続・デモ判定（端末内Llamaはまだ準備中）
+          AI未接続・デモ判定
         </Text>
       ) : null}
 
-      <TextInputField
-        label={inputLabel}
-        value={inputText}
-        onChangeText={setInputText}
-        placeholder={inputPlaceholder}
-        compact
-      />
-
-      <View style={styles.choicesBlock}>
-        <Text
-          style={[
-            styles.sectionTitle,
-            { fontSize: fontSize(baseFontSizes.bodyLarge) },
-          ]}
-        >
-          よくある相談
-        </Text>
-        <View style={styles.choices}>
-          {choices.map((choice) => (
-            <ChoiceButton
-              key={choice.id}
-              label={choice.label}
-              compact
+      {method === 'pick' ? (
+        <>
+          <Text
+            style={[styles.lead, { fontSize: fontSize(baseFontSizes.title) }]}
+            numberOfLines={2}
+            accessibilityRole="header"
+          >
+            どうやって伝えますか？
+          </Text>
+          <View style={styles.methodActions}>
+            <PrimaryButton
+              label="文字で入力"
+              onPress={() => setMethod('text')}
+            />
+            <PrimaryButton
+              label="音声で入力"
+              variant="secondary"
               onPress={() => {
-                void proceed(inputText.trim(), choice.label);
+                const availability = getSpeechRecognitionAvailability();
+                setVoiceHint(
+                  availability.usable ? '' : availability.detail,
+                );
+                setMethod('voice');
               }}
             />
-          ))}
-        </View>
-      </View>
+          </View>
+        </>
+      ) : null}
 
-      <PrimaryButton
-        label={busy ? '確認しています…' : 'この内容で進む'}
-        onPress={() => {
-          void proceed(inputText.trim());
-        }}
-        disabled={!canSubmit}
-      />
+      {method === 'text' ? (
+        <>
+          <Text
+            style={[styles.lead, { fontSize: fontSize(baseFontSizes.title) }]}
+            numberOfLines={2}
+            accessibilityRole="header"
+          >
+            困っていることを書いてください
+          </Text>
+          <View style={styles.inputBlock}>
+            <TextInputField
+              label={inputLabel}
+              value={inputText}
+              onChangeText={setInputText}
+              placeholder={inputPlaceholder}
+            />
+          </View>
+          <PrimaryButton
+            label={busy ? '確認しています…' : 'この内容で進む'}
+            onPress={() => {
+              void proceed(inputText);
+            }}
+            disabled={!canSubmit}
+          />
+        </>
+      ) : null}
+
+      {method === 'voice' ? (
+        <>
+          <Text
+            style={[styles.lead, { fontSize: fontSize(baseFontSizes.title) }]}
+            numberOfLines={2}
+            accessibilityRole="header"
+          >
+            話してください。あとで文字を直せます
+          </Text>
+          {voiceHint ? (
+            <Text
+              style={[
+                styles.voiceHint,
+                { fontSize: fontSize(baseFontSizes.caption) },
+              ]}
+              numberOfLines={2}
+            >
+              {voiceHint}
+            </Text>
+          ) : null}
+          <PrimaryButton
+            label={listening ? '聞き取りを止める' : 'マイクで話す'}
+            onPress={() => {
+              if (listening) {
+                stopListening();
+                return;
+              }
+              startListening();
+            }}
+            disabled={busy}
+          />
+          <View style={styles.inputBlock}>
+            <TextInputField
+              label="聞き取った文字（直せます）"
+              value={inputText}
+              onChangeText={setInputText}
+              placeholder="ここに文字が出ます"
+              compact
+            />
+          </View>
+          <PrimaryButton
+            label={busy ? '確認しています…' : 'この内容で進む'}
+            onPress={() => {
+              void proceed(inputText);
+            }}
+            disabled={!canSubmit}
+          />
+        </>
+      ) : null}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   content: {
-    gap: 10,
+    gap: 12,
   },
   lead: {
-    color: colors.textSecondary,
-    lineHeight: 26,
+    color: colors.text,
+    fontWeight: '700',
+    lineHeight: 34,
   },
   demoHint: {
     color: colors.primary,
     fontWeight: '700',
   },
-  choicesBlock: {
+  methodActions: {
     flex: 1,
-    gap: 8,
+    justifyContent: 'center',
+    gap: 16,
     minHeight: 0,
   },
-  sectionTitle: {
-    color: colors.text,
-    fontWeight: '700',
-  },
-  choices: {
+  inputBlock: {
     flex: 1,
-    gap: 8,
     minHeight: 0,
+    justifyContent: 'center',
+  },
+  voiceHint: {
+    color: colors.textSecondary,
+    lineHeight: 24,
   },
 });

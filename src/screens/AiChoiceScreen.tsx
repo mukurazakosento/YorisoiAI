@@ -21,8 +21,8 @@ import type { RootStackParamList } from '../types/navigation';
 type Props = NativeStackScreenProps<RootStackParamList, 'AiChoice'>;
 
 /**
- * 要求が不明なときの選択肢だけの画面（スクロールなし・約4つ）。
- * 端末内 AI が ready なら動的生成。未接続時はデモ選択肢＋明示ラベル。
+ * 要求が曖昧なときだけ出す選択肢画面（最初からは出さない）。
+ * 一画面・一つの質問。端末内 AI 未接続時はデモ選択肢＋明示ラベル。
  */
 export function AiChoiceScreen({ navigation, route }: Props) {
   const { featureId, text, choiceLabel, clarifyRound } = route.params;
@@ -31,9 +31,7 @@ export function AiChoiceScreen({ navigation, route }: Props) {
   const [choices, setChoices] = useState<ConsultationChoice[]>(
     () => DEMO_CLARIFY_CHOICES[featureId].slice(0, 4),
   );
-  const [question, setQuestion] = useState(
-    'もう少し具体的に教えてください。下のどれかに近いですか？',
-  );
+  const [question, setQuestion] = useState('どれに近いですか？');
   const [banner, setBanner] = useState(() => clarifyChoicesBanner('demo'));
   const [loading, setLoading] = useState(true);
 
@@ -83,39 +81,33 @@ export function AiChoiceScreen({ navigation, route }: Props) {
         onPressBack={() => navigation.goBack()}
       />
 
-      <View style={styles.banner}>
-        <Text
-          style={[styles.bannerLabel, { fontSize: fontSize(baseFontSizes.caption) }]}
-        >
-          {banner}
-        </Text>
-        <Text
-          style={[styles.bannerBody, { fontSize: fontSize(baseFontSizes.body) }]}
-          numberOfLines={3}
-        >
-          {loading ? '選択肢を用意しています…' : question}
-        </Text>
-      </View>
+      <Text
+        style={[styles.bannerLabel, { fontSize: fontSize(baseFontSizes.caption) }]}
+        numberOfLines={1}
+      >
+        {banner}
+      </Text>
+
+      <Text
+        style={[styles.question, { fontSize: fontSize(baseFontSizes.title) }]}
+        numberOfLines={2}
+        accessibilityRole="header"
+      >
+        {loading ? '選択肢を用意しています…' : question}
+      </Text>
 
       <View style={styles.choices}>
         {choices.map((choice) => (
           <ChoiceButton
             key={choice.id}
             label={choice.label}
-            compact
             onPress={() => pick(choice.label)}
           />
         ))}
       </View>
 
-      <Text
-        style={[styles.roundHint, { fontSize: fontSize(baseFontSizes.caption) }]}
-      >
-        確認 {clarifyRound} 回目
-      </Text>
-
       <PrimaryButton
-        label="相談の最初に戻る"
+        label="最初に戻る"
         variant="secondary"
         onPress={() => navigation.navigate('Consultation', { featureId })}
       />
@@ -125,31 +117,20 @@ export function AiChoiceScreen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
   content: {
-    gap: 10,
-  },
-  banner: {
-    backgroundColor: colors.primarySoft,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 12,
-    gap: 6,
+    gap: 12,
   },
   bannerLabel: {
     color: colors.primary,
     fontWeight: '700',
   },
-  bannerBody: {
+  question: {
     color: colors.text,
-    lineHeight: 26,
+    fontWeight: '700',
+    lineHeight: 34,
   },
   choices: {
     flex: 1,
-    gap: 8,
+    gap: 10,
     minHeight: 0,
-  },
-  roundHint: {
-    color: colors.textMuted,
-    textAlign: 'center',
   },
 });

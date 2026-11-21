@@ -218,3 +218,16 @@ export const SPEECH_MUTE_HELP =
 
 export const SPEECH_DISABLED_HELP =
   '音声案内はオフです。聞くときは、設定で「音声案内」をオンにしてください。画面の文字はそのまま読めます。';
+
+export {
+  SPEECH_RECOGNITION_EXPO_GO_HINT,
+  SPEECH_RECOGNITION_PERMISSION_HINT,
+  SPEECH_RECOGNITION_UNAVAILABLE_HINT,
+  abortSpeechRecognition,
+  getSpeechRecognitionAvailability,
+  requestSpeechRecognitionPermission,
+  startSpeechRecognition,
+  stopSpeechRecognition,
+  transcriptFromResultEvent,
+} from './recognition';
+export type { SpeechRecognitionAvailability } from './recognition';

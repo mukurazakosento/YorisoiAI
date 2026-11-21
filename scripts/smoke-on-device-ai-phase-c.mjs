@@ -53,6 +53,11 @@ const consultation = read('src/screens/ConsultationScreen.tsx');
 assert.match(consultation, /classifyIntent/);
 assert.match(consultation, /onDeviceAi/);
 assert.match(consultation, /AI未接続/);
+assert.match(consultation, /文字で入力/);
+assert.match(consultation, /音声で入力/);
+assert.match(consultation, /startSpeechRecognition|expo-speech-recognition/);
+assert.doesNotMatch(consultation, /INITIAL_CHOICES/);
+assert.doesNotMatch(consultation, /よくある相談/);
 assert.doesNotMatch(consultation, /requestConsultation/);
 assert.doesNotMatch(consultation, /\bScrollView\b/);
 

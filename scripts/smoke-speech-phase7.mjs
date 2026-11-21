@@ -68,6 +68,15 @@ assert.doesNotMatch(sessionScreen, /imageBase64|screenshotBytes/);
 
 const consultation = read('src/screens/ConsultationScreen.tsx');
 assert.doesNotMatch(consultation, /imageBase64|screenshotBytes/);
+assert.match(consultation, /文字で入力/);
+assert.match(consultation, /音声で入力/);
+
+const recognition = read('src/services/speech/recognition.ts');
+assert.match(recognition, /expo-speech-recognition/);
+assert.match(recognition, /ja-JP/);
+assert.match(recognition, /Expo Go/);
+assert.match(recognition, /EAS/);
+assert.doesNotMatch(recognition, /GEMINI_API_KEY/);
 
 const settingsScreen = read('src/screens/SettingsScreen.tsx');
 assert.match(settingsScreen, /音声案内/);
@@ -101,7 +110,11 @@ assert.doesNotMatch(readme, /APPLE_PASSWORD|-----BEGIN PRIVATE KEY-----/);
 
 const packageJson = JSON.parse(read('package.json'));
 assert.equal(packageJson.dependencies['expo-speech'], '~58.0.3');
+assert.ok(packageJson.dependencies['expo-speech-recognition']);
 assert.match(packageJson.scripts['smoke:speech'], /smoke-speech-phase7/);
+
+const appJsonSpeech = read('app.json');
+assert.match(appJsonSpeech, /expo-speech-recognition/);
 
 // clampSpeechRate をソースから切り出して Node 上で検証（native 不要）
 function clampSpeechRate(rate) {
