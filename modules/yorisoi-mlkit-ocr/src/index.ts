@@ -52,21 +52,21 @@ export async function recognizeJapaneseText(
 
   if (Platform.OS === 'web') {
     throw new OcrNativeUnavailableError(
-      '文字認識は iPhone の開発用ビルド（EAS development build）でのみ使えます。Web や Expo Go では動きません。画像は外部へ送りません。',
+      '文字認識は Android / iPhone の EAS ビルド（development または preview APK）でのみ使えます。Web や Expo Go では動きません。画像は外部へ送りません。',
     );
   }
 
   const native = getNativeOcrModule();
   if (!native) {
     throw new OcrNativeUnavailableError(
-      '文字認識のネイティブ機能が組み込まれていません。Expo Go ではなく EAS の development build を使ってください。画像は端末の外へ送っていません。',
+      '文字認識のネイティブ機能が組み込まれていません。Expo Go ではなく EAS の development / preview ビルドを使ってください。画像は端末の外へ送っていません。',
     );
   }
 
   if (!native.isAvailable()) {
     throw new OcrNativeUnavailableError(
-      Platform.OS === 'android'
-        ? 'Android 向けの文字認識はこれから用意します。いまは iPhone の development build でお使いください。画像は外部へ送っていません。'
+      Platform.OS === 'ios'
+        ? 'この端末（シミュレータ等）では Google ML Kit の日本語文字認識を使えません。実機の development build でお試しください。画像は外部へ送っていません。'
         : 'この端末では Google ML Kit の日本語文字認識を使えません。画像は外部へ送っていません。',
     );
   }

@@ -78,14 +78,15 @@ export function getCaptureAvailability(): CaptureAvailability {
       periodicAutoFramesAvailable: false,
       capability: 'unavailable',
       recordingLabel: android
-        ? '画面収録：制限あり'
+        ? '画面収録：要EASビルド'
         : '画面収録：要development build',
       periodicOcrLabel: android
-        ? '定期OCR：未対応'
+        ? '定期OCR：要EASビルド'
         : '定期OCR：要development build',
       message: android
         ? `${ocr.message} ${CAPTURE_LIMITS_SHORT.cannotOneLiner}`
         : CAPTURE_LIMITS_SHORT.expoGoWeb,
+      // Expo Go / 未リンク時。MediaProjection は今回未実装（定期は都度スクショのみ）。
       reason: android ? 'android-limited' : 'expo-go-or-missing-ocr',
     };
   }

@@ -59,25 +59,16 @@ export function getOcrAvailability(): OcrAvailability {
       available: false,
       reason: 'web',
       message:
-        '文字認識は iPhone の development build（EAS）でのみ使えます。Expo Go や Web では動きません。画像は外部へ送りません。',
+        '文字認識は Android / iPhone の EAS ビルドでのみ使えます。Expo Go や Web では動きません。画像は外部へ送りません。',
     };
   }
 
   if (!isNativeOcrAvailable()) {
-    if (Platform.OS === 'android') {
-      return {
-        available: false,
-        reason: 'android-stub',
-        message:
-          'Android 向けの文字認識はこれから用意します。いまは iPhone の development build でお使いください。画像は外部へ送っていません。',
-      };
-    }
-
     return {
       available: false,
       reason: 'expo-go-or-missing-native',
       message:
-        '文字認識には EAS の development build が必要です（Expo Go では使えません）。画像は端末の外へ送っていません。',
+        '文字認識には EAS の development / preview ビルドが必要です（Expo Go では使えません）。画像は端末の外へ送っていません。',
     };
   }
 

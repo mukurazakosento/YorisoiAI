@@ -10,7 +10,7 @@
 - **AI 既定**: 端末内 Llama 系（`src/services/onDeviceAi/`）。Web は WebLLM、ネイティブは llama.cpp / ExecuTorch スキャフォールド
 - 未接続時は明示 **デモ / AI未接続**。`mode: live` はエンジン ready のときだけ
 - **画面フレーム**: `src/services/capture/`（利用者開始のスクショ選択＋端末内 OCR。Broadcast Upload は未リンク）
-- OCR: `modules/yorisoi-mlkit-ocr`（ML Kit 日本語・端末内のみ）。確認済みテキストだけ案内へ
+- OCR: `modules/yorisoi-mlkit-ocr`（ML Kit 日本語・端末内のみ。Android は bundled モデル）。確認済みテキストだけ案内へ
 - 旧 `functions/` Gemini Callable は `EXPO_PUBLIC_LEGACY_CLOUD_AI=true` の任意経路（必須にしない）
 - 音声は Expo Speech（`src/services/speech/`）。displayText と voiceText を分離
 - 通知は expo-notifications（`src/services/notifications/`）。拒否時は画面内文言へフォールバック

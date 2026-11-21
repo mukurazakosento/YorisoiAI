@@ -11,10 +11,14 @@ android {
   defaultConfig {
     versionCode 1
     versionName "0.1.0"
+    // ML Kit Text Recognition v2 Japanese requires API 23+
+    minSdkVersion 23
   }
 }
 
 dependencies {
-  // Android Japanese ML Kit will be swapped in later.
-  // Stub module reports isAvailable()=false and never uploads images.
+  // Bundled Japanese model (statically linked) — offline-ready for docomo demos.
+  // Prefer this over play-services-mlkit-* which needs a Play Services download.
+  // https://developers.google.com/ml-kit/vision/text-recognition/v2/android
+  implementation 'com.google.mlkit:text-recognition-japanese:16.0.1'
 }

@@ -61,10 +61,25 @@ assert.match(swift, /JapaneseTextRecognizerOptions/);
 assert.match(swift, /MLKitTextRecognitionJapanese/);
 assert.doesNotMatch(swift, /URLSession\.shared\.upload|FirebaseStorage/);
 
-const androidStub = read(
+const androidKt = read(
   'modules/yorisoi-mlkit-ocr/android/src/main/java/expo/modules/yorisoimlkitocr/YorisoiMlkitOcrModule.kt',
 );
-assert.match(androidStub, /OCR_ANDROID_NOT_READY|これから用意/);
+assert.match(androidKt, /JapaneseTextRecognizerOptions/);
+assert.match(androidKt, /TextRecognition\.getClient/);
+assert.match(androidKt, /mlkit-japanese/);
+assert.match(androidKt, /content:\/\//);
+assert.doesNotMatch(androidKt, /OCR_ANDROID_NOT_READY|これから用意/);
+assert.doesNotMatch(androidKt, /URLConnection|FirebaseStorage|OkHttp|HttpURLConnection/);
+
+const androidGradle = read('modules/yorisoi-mlkit-ocr/android/build.gradle');
+assert.match(
+  androidGradle,
+  /com\.google\.mlkit:text-recognition-japanese/,
+);
+assert.doesNotMatch(
+  androidGradle,
+  /play-services-mlkit-text-recognition-japanese/,
+);
 
 // --- Import the REAL assembly module（確認済みテキストのみ） ---
 const consultationTextUrl = pathToFileURL(
@@ -173,6 +188,14 @@ assert.ok(
       (Array.isArray(p) && p[0] === 'expo-image-picker'),
   ),
 );
+
+const easJson = JSON.parse(read('eas.json'));
+assert.equal(easJson.build.preview?.android?.buildType, 'apk');
+assert.equal(easJson.build['preview-apk']?.android?.buildType, 'apk');
+
+const ocrAvailabilitySrc = read('src/services/ocr/index.ts');
+assert.doesNotMatch(ocrAvailabilitySrc, /android-stub|これから用意/);
+assert.match(ocrAvailabilitySrc, /EAS の development \/ preview/);
 
 console.log('smoke-ocr-phase4: ok');
 console.log('- Real consultationText path: deleted confirm-screen text absent');
