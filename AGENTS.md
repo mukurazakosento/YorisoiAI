@@ -10,9 +10,10 @@
 - **AI 既定**: 端末内 Llama 系（`src/services/onDeviceAi/`）。Web は WebLLM、ネイティブは llama.cpp / ExecuTorch スキャフォールド
 - 未接続時は明示 **デモ / AI未接続**。`mode: live` はエンジン ready のときだけ
 - **画面フレーム**: `src/services/capture/`（利用者開始のスクショ選択＋端末内 OCR。Broadcast Upload は未リンク）
-- OCR: `modules/yorisoi-mlkit-ocr`（ML Kit 日本語・端末内のみ。Android は bundled モデル）。確認済みテキストだけ案内へ
+- **Android 背面支援**: `modules/yorisoi-android-assist` + `src/services/androidAssist/`（MediaProjection＋FGS・約3秒 OCR・変化時のみ案内）。iOS/Web/Expo Go では不可
+- OCR: `modules/yorisoi-mlkit-ocr`（ML Kit 日本語・端末内のみ。Android は bundled モデル）。背面支援も同一 ML Kit 系を再利用（OCR Expo モジュールは増やさない）。確認済みテキストだけ案内へ
 - 旧 `functions/` Gemini Callable は `EXPO_PUBLIC_LEGACY_CLOUD_AI=true` の任意経路（必須にしない）
-- 音声は Expo Speech（`src/services/speech/`）。displayText と voiceText を分離
+- 音声は Expo Speech（`src/services/speech/`）。背面支援中は Android TTS も使用。displayText と voiceText を分離
 - 通知は expo-notifications（`src/services/notifications/`）。拒否時は画面内文言へフォールバック
 
 ## Hard rules
@@ -26,23 +27,26 @@
 - Apple の証明書・パスワード・APIキーを README やコードに書かない
 - iOS の他アプリ常時キャプチャ制限を正直に扱う
 - 断定的な「安全です」は使わない
-- Expo Go / Web でライブ収録や OCR が動くと主張しない
+- Expo Go / Web でライブ収録や OCR・背面支援が動くと主張しない
+- MediaProjection トークンの stop 後再利用・ブート自動開始・他アプリ代行タップはしない
 
 ## Layout
 
-`src/{components,screens,navigation,services/{capture,onDeviceAi,ai,ocr,speech,notifications,security,firebase,session},hooks,types,constants,utils,data}`  
+`src/{components,screens,navigation,services/{capture,androidAssist,onDeviceAi,ai,ocr,speech,notifications,security,firebase,session},hooks,types,constants,utils,data}`  
 `functions/src/{ai,shared,...}`（旧 Gemini 経路・任意）  
-`modules/yorisoi-mlkit-ocr/`
+`modules/yorisoi-mlkit-ocr/`  
+`modules/yorisoi-android-assist/`（Android のみ）
 
 ## Phase C / Phase D 画面フロー
 
-Home → Consultation（文字／音声の2択 → 入力・端末内意図判定）→（曖昧なときだけ）AiChoice → SupportSession（Phase C: 端末内AI案内 / Phase D: 収録境界＋都度 OCR → guiding → offer_end）→ EndSupport
+Home → Consultation（文字／音声の2択 → 入力・端末内意図判定）→（曖昧なときだけ）AiChoice →（Android 背面支援可なら）AndroidAssistConsent → SupportSession（端末内AI案内 / 手動 OCR / Android MediaProjection 背面支援 → guiding → offer_end）→ EndSupport
 
 ## Checks
 
 ```bat
 npm run typecheck
 npm run smoke:capture
+npm run smoke:android-assist
 npm run smoke:on-device
 npm run smoke:session
 npm run smoke:speech
@@ -50,5 +54,6 @@ npm run smoke:ocr
 npx expo start
 ```
 
-OCR / 画面フレーム読み取りは EAS development build が必要。画像は端末外へ送らない。  
-WebLLM の実ロードは `EXPO_PUBLIC_ON_DEVICE_AI=true` かつ WebGPU 付きブラウザが必要（失敗時はデモのまま）。
+OCR / 画面フレーム読み取り / Android 背面支援は EAS development または preview APK が必要。画像は端末外へ送らない。  
+WebLLM の実ロードは `EXPO_PUBLIC_ON_DEVICE_AI=true` かつ WebGPU 付きブラウザが必要（失敗時はデモのまま）。  
+ネイティブ Llama は未接続（`createNativeLlamaEngine` は null）。背面案内のヒューリスティックを live AI と偽らない。

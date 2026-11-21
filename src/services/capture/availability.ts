@@ -48,12 +48,29 @@ function probeOcrAvailability(): OcrProbe {
   };
 }
 
+function probeAndroidAssistLinked(): boolean {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const assist = require('../androidAssist') as {
+      getAndroidAssistAvailability?: () => { available: boolean };
+    };
+    if (typeof assist.getAndroidAssistAvailability === 'function') {
+      return assist.getAndroidAssistAvailability().available;
+    }
+  } catch {
+    // Node / iOS / Expo Go
+  }
+  return false;
+}
+
 /**
  * 画面収録・フレーム OCR の利用可否。
  * Expo Go / Web では live 収録を主張しない。Broadcast 未リンクも偽らない。
+ * Android MediaProjection はモジュールリンク時のみ periodic を true にする。
  */
 export function getCaptureAvailability(): CaptureAvailability {
   const broadcastLinked = isBroadcastUploadLinked();
+  const androidAssistLinked = probeAndroidAssistLinked();
   const os = getRuntimeOs();
   const ocr = probeOcrAvailability();
 
@@ -61,6 +78,7 @@ export function getCaptureAvailability(): CaptureAvailability {
     return {
       manualFrameAvailable: false,
       broadcastUploadLinked: false,
+      androidMediaProjectionLinked: false,
       periodicAutoFramesAvailable: false,
       capability: 'unavailable',
       recordingLabel: '画面収録：不可（Web）',
@@ -75,6 +93,7 @@ export function getCaptureAvailability(): CaptureAvailability {
     return {
       manualFrameAvailable: false,
       broadcastUploadLinked: broadcastLinked,
+      androidMediaProjectionLinked: false,
       periodicAutoFramesAvailable: false,
       capability: 'unavailable',
       recordingLabel: android
@@ -86,7 +105,6 @@ export function getCaptureAvailability(): CaptureAvailability {
       message: android
         ? `${ocr.message} ${CAPTURE_LIMITS_SHORT.cannotOneLiner}`
         : CAPTURE_LIMITS_SHORT.expoGoWeb,
-      // Expo Go / 未リンク時。MediaProjection は今回未実装（定期は都度スクショのみ）。
       reason: android ? 'android-limited' : 'expo-go-or-missing-ocr',
     };
   }
@@ -95,6 +113,7 @@ export function getCaptureAvailability(): CaptureAvailability {
     return {
       manualFrameAvailable: true,
       broadcastUploadLinked: true,
+      androidMediaProjectionLinked: false,
       periodicAutoFramesAvailable: true,
       capability: 'broadcast_upload',
       recordingLabel: '画面収録：Broadcast利用可',
@@ -105,13 +124,29 @@ export function getCaptureAvailability(): CaptureAvailability {
     };
   }
 
+  if (os === 'android' && androidAssistLinked) {
+    return {
+      manualFrameAvailable: true,
+      broadcastUploadLinked: false,
+      androidMediaProjectionLinked: true,
+      periodicAutoFramesAvailable: true,
+      capability: 'android_mediaprojection',
+      recordingLabel: '画面収録：MediaProjection可',
+      periodicOcrLabel: '定期OCR：背面支援可',
+      message: `${CAPTURE_LIMITS_SHORT.androidAssistOneLiner} ${CAPTURE_LIMITS_SHORT.canOneLiner}`,
+      reason: 'ok-android-assist',
+    };
+  }
+
   return {
     manualFrameAvailable: true,
     broadcastUploadLinked: false,
+    androidMediaProjectionLinked: false,
     periodicAutoFramesAvailable: false,
     capability: 'manual_screenshot_ocr',
     recordingLabel: '画面収録：利用者開始のみ',
-    periodicOcrLabel: '定期OCR：都度読み取り',
+    periodicOcrLabel:
+      os === 'android' ? '定期OCR：要背面支援ビルド' : '定期OCR：都度読み取り',
     message: `${CAPTURE_LIMITS_SHORT.canOneLiner} ${CAPTURE_LIMITS_SHORT.broadcastNotLinked}`,
     reason: 'ok-manual',
   };
@@ -122,13 +157,23 @@ export function assertCaptureHonesty(availability: CaptureAvailability): boolean
     return (
       !availability.manualFrameAvailable &&
       !availability.periodicAutoFramesAvailable &&
-      !availability.broadcastUploadLinked
+      !availability.broadcastUploadLinked &&
+      !availability.androidMediaProjectionLinked
     );
   }
   if (availability.capability === 'manual_screenshot_ocr') {
     return (
       availability.manualFrameAvailable &&
       !availability.periodicAutoFramesAvailable &&
+      !availability.broadcastUploadLinked &&
+      !availability.androidMediaProjectionLinked
+    );
+  }
+  if (availability.capability === 'android_mediaprojection') {
+    return (
+      availability.manualFrameAvailable &&
+      availability.androidMediaProjectionLinked &&
+      availability.periodicAutoFramesAvailable &&
       !availability.broadcastUploadLinked
     );
   }

@@ -20,6 +20,7 @@ import {
   transcriptFromResultEvent,
 } from '../services/speech/recognition';
 import type { RootStackParamList } from '../types/navigation';
+import { navigateToSupportSession } from '../utils/navigateToSupport';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Consultation'>;
 
@@ -96,7 +97,7 @@ export function ConsultationScreen({ navigation, route }: Props) {
         return;
       }
 
-      navigation.navigate('SupportSession', {
+      navigateToSupportSession(navigation, {
         featureId,
         summary: trimmed,
       });

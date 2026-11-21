@@ -18,28 +18,27 @@
 
 旧 Phase 1〜7（Gemini Callable・手動スクショ OCR 中心）は参考実装として残っていますが、**最終仕様のフローが優先**です。
 
-## いまの実装範囲（Android 試作〜11/24 ＋ Phase D）
+## いまの実装範囲（Android 背面支援 ＋ Phase D）
 
-**Android 優先の APK 試作**と、画面収録境界＋端末内 OCR の支援セッション配線まで入りました。正直な稼働状況:
+**Android MediaProjection 背面支援**と、画面収録境界＋端末内 OCR の支援セッション配線まで入りました。正直な稼働状況:
 
 | 経路 | 状態 |
 | --- | --- |
-| EAS preview **APK**（Android 実機） | スクショ／写真選択 → **bundled ML Kit 日本語 OCR**（オフライン可）→ 確認文字だけ案内へ → 音声・ローカル通知 |
-| EAS development build（iPhone 実機） | 同上（iOS ML Kit）。Broadcast は未リンク |
-| MediaProjection / Broadcast 定期フレーム | **未実装／未リンク**。サイレント監視はしません |
-| Expo Go / Web | ライブ収録もネイティブ OCR も **動きません**（不可と明示。偽の成功なし） |
+| EAS preview **APK**（Android 実機） | スクショ OCR に加え、**同意＋画面共有許可後**に MediaProjection＋FGS で背面支援（約3秒・OCR変化時のみ案内・通知/TTS）。**実機未検証なら成功と書かない** |
+| EAS development build（iPhone 実機） | 手動スクショ OCR。Broadcast / MediaProjection 背面支援は **なし** |
+| Broadcast Upload 定期フレーム（iOS） | **未リンク** |
+| Expo Go / Web | ライブ収録・ネイティブ OCR・背面支援は **動きません**（不可と明示） |
 | 端末内 AI（ネイティブ Llama） | **未接続**。デモ判定・デモ案内を明示（`AI稼働中` にはしません） |
 
-動くもの:
+動くもの（コード上。実機確認は EAS APK 後）:
 
 - ホーム（左「よりそいAI」・右設定・3ボタン）
 - 相談開始（文字／音声の2択）→ 端末内 `classifyIntent`（未接続時はヒューリスティック・**デモ**明示）。曖昧なときだけ追加の選択肢
-- 音声入力は **EAS development build / APK** 向け（Expo Go では不可と明示。文字入力へ誘導）
+- Android: 同意画面 → 画面共有許可 → 背面でも案内継続（**代わりにタップ／送信はしない**）
 - 支援セッション: **start → guiding → offer end → EndSupport**
-- **操作支援**: 「画面を読み取る」→ 確認済み文字で次の一手を組み直し
-- **安全性チェック**: 電話／メールを開いたあと「画面の文字を調べる」（先に開く導線）
-- **文章説明**: 相談で文章入力、または「ポップアップを読み取る」
-- ローカル通知＋ Expo Speech。消音でも画面の文字は出ます
+- **操作支援**: 手動「画面を読み取る」または背面 OCR 変化で次の一手（LINEで孫に写真を送る脚本あり）
+- **安全性チェック** / **文章説明**: 既存の手動 OCR 経路を維持
+- ローカル通知＋ Expo Speech（背面中は Android TTS）。消音でも画面の文字は出ます
 
 ## 画面収録・OCR の実機での有効化
 
@@ -118,7 +117,8 @@ npm start
 | 設定保存 | AsyncStorage（端末内） |
 | AI（既定） | `src/services/onDeviceAi`（WebLLM / ネイティブスキャフォールド）。未接続時はデモ明示 |
 | 画面フレーム | `src/services/capture`（利用者開始・確認済み文字のみ） |
-| OCR | Google ML Kit 日本語（`modules/yorisoi-mlkit-ocr`、端末内のみ） |
+| Android 背面支援 | MediaProjection＋FGS（`modules/yorisoi-android-assist` / `src/services/androidAssist`） |
+| OCR | Google ML Kit 日本語（`modules/yorisoi-mlkit-ocr`、端末内のみ。背面支援も同系 ML Kit） |
 | AI（旧経路） | Firebase Cloud Functions + Gemini（`EXPO_PUBLIC_LEGACY_CLOUD_AI=true` のときだけ） |
 | 音声 | Expo Speech（読み上げ）＋ expo-speech-recognition（音声入力）。displayText / voiceText 分離 |
 | 通知 | expo-notifications（ローカル通知） |
@@ -132,12 +132,13 @@ src/
   screens/        # Home / Consultation / AiChoice / SupportSession / EndSupport / Settings
   navigation/
   services/
-    capture/      # 画面収録境界・OS制限・確認済みフレーム文字
-    onDeviceAi/   # 端末内 AI（意図・選択肢・案内 JSON）
-    session/      # デモ脚本コーパス・意図ヒューリスティック
+    capture/         # 画面収録境界・OS制限・確認済みフレーム文字
+    androidAssist/   # Android MediaProjection 背面支援（JS 境界）
+    onDeviceAi/      # 端末内 AI（意図・選択肢・案内 JSON）
+    session/         # デモ脚本コーパス・意図ヒューリスティック
     notifications/
-    ocr/          # 端末内 OCR（選択・認識・一時ファイル削除）
-    ai/           # 旧 Gemini クライアント（任意）
+    ocr/             # 端末内 OCR（選択・認識・一時ファイル削除）
+    ai/              # 旧 Gemini クライアント（任意）
     speech/
     security/
     firebase/
@@ -148,6 +149,7 @@ src/
   data/
 functions/        # 旧 Cloud Functions（任意）
 modules/yorisoi-mlkit-ocr/
+modules/yorisoi-android-assist/
 ```
 
 ## Windows での開発手順
@@ -182,6 +184,7 @@ npm start
 ```bat
 npm run typecheck
 npm run smoke:capture
+npm run smoke:android-assist
 npm run smoke:on-device
 npm run smoke:session
 npm run smoke:speech

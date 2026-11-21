@@ -17,6 +17,7 @@ import {
 } from '../services/onDeviceAi';
 import type { ConsultationChoice } from '../types/consultation';
 import type { RootStackParamList } from '../types/navigation';
+import { navigateToSupportSession } from '../utils/navigateToSupport';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AiChoice'>;
 
@@ -67,7 +68,7 @@ export function AiChoiceScreen({ navigation, route }: Props) {
       return;
     }
 
-    navigation.navigate('SupportSession', {
+    navigateToSupportSession(navigation, {
       featureId,
       summary: pickedLabel,
     });

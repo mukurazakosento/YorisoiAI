@@ -65,7 +65,7 @@ assert.match(ocrIndex, /recognizeTextFromImageUri|pickAndRecognizeScreenshot/);
 assert.match(ocrIndex, /deleteTempImageUri/);
 
 const packageJson = JSON.parse(read('package.json'));
-assert.equal(packageJson.version, '0.12.0');
+assert.equal(packageJson.version, '0.13.0');
 assert.match(packageJson.scripts['smoke:capture'], /smoke-capture-phase-d/);
 
 const readme = read('README.md');
@@ -81,7 +81,7 @@ assert.match(agents, /capture|画面収録/);
 assert.match(agents, /smoke:capture/);
 
 const config = read('src/constants/config.ts');
-assert.match(config, /0\.12\.0-ui-input/);
+assert.match(config, /0\.13\.0-android-assist/);
 
 // --- Runtime: capability honesty + confirmed-text-only summary ---
 const captureUrl = pathToFileURL(
@@ -111,6 +111,7 @@ resetCaptureSessionForTests();
 const availability = getCaptureAvailability();
 assert.equal(assertCaptureHonesty(availability), true);
 assert.equal(availability.broadcastUploadLinked, false);
+assert.equal(availability.androidMediaProjectionLinked, false);
 assert.equal(availability.periodicAutoFramesAvailable, false);
 
 // Node / smoke 環境では OCR ネイティブ無し → unavailable が正しい

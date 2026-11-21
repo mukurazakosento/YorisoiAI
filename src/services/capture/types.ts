@@ -3,11 +3,13 @@ import type { FeatureId } from '../../types/navigation';
 /**
  * 画面収録・フレーム取り込みの能力。
  * - manual_screenshot_ocr: 利用者がスクショ → ライブラリ選択 → 端末内 OCR（いまの本線）
+ * - android_mediaprojection: Android MediaProjection + FGS（背面支援）
  * - broadcast_upload: ReplayKit Broadcast Upload Extension（未リンク時は使えない）
  * - unavailable: Web / Expo Go など。動いているように見せない
  */
 export type CaptureCapability =
   | 'manual_screenshot_ocr'
+  | 'android_mediaprojection'
   | 'broadcast_upload'
   | 'unavailable';
 
@@ -25,6 +27,8 @@ export type CaptureAvailability = {
   manualFrameAvailable: boolean;
   /** Broadcast Upload Extension がリンク済みか（現状は常に false） */
   broadcastUploadLinked: boolean;
+  /** Android MediaProjection 背面支援モジュールがリンク済みか */
+  androidMediaProjectionLinked: boolean;
   /** 定期の自動フレーム取り込みが可能か（未リンクなら false） */
   periodicAutoFramesAvailable: boolean;
   /** いま使える能力の代表値 */
@@ -37,6 +41,7 @@ export type CaptureAvailability = {
   message: string;
   reason:
     | 'ok-manual'
+    | 'ok-android-assist'
     | 'web'
     | 'expo-go-or-missing-ocr'
     | 'android-limited'
