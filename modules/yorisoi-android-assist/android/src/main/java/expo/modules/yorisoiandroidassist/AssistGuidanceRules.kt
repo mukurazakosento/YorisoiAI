@@ -37,12 +37,14 @@ object AssistGuidanceRules {
       )
     }
     if (featureId == "textExplanation") {
-      return Step(
-        stepId = "explain-read",
-        stageId = "explain",
-        displayText = "画面の文を読みました。分からなければ「分かりません」。",
-        voiceText = "いまの画面の文字を読みました。難しいときはアプリに戻って「分かりません」を押してください。",
-      )
+      // Prefer dialog explain; else grounded OCR summary (demo).
+      return AssistPopupExplainer.explainScreenText(raw)
+    }
+
+    // Popups interrupt stage guidance (operationSupport / etc.).
+    val popup = AssistPopupDetector.detect(raw)
+    if (popup != null) {
+      return AssistPopupExplainer.explain(popup)
     }
 
     if (looksLikeLinePhotoGoal(goal)) {

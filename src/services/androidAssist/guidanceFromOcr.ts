@@ -1,4 +1,5 @@
 import type { FeatureId } from '../../types/navigation';
+import { detectPopup, explainPopup, explainScreenText } from './popupDetect';
 import type { AndroidAssistGuidance } from './types';
 
 type StepCore = Omit<AndroidAssistGuidance, 'at' | 'ocrTextPreview' | 'mode'>;
@@ -38,12 +39,24 @@ export function buildGuidanceFromOcrText(input: {
   }
 
   if (input.featureId === 'textExplanation') {
+    const explained = explainScreenText(ocrRaw);
     return base({
-      stepId: 'explain-read',
-      stageId: 'explain',
-      displayText: '画面の文を読みました。分からなければ「分かりません」。',
-      voiceText:
-        'いまの画面の文字を読みました。難しいときはアプリに戻って「分かりません」を押してください。',
+      stepId: explained.stepId,
+      stageId: explained.stageId,
+      displayText: explained.displayText,
+      voiceText: explained.voiceText,
+    });
+  }
+
+  // Popup interrupts operation-support when OCR looks like a dialog.
+  const popup = detectPopup(ocrRaw);
+  if (popup && input.featureId === 'operationSupport') {
+    const explained = explainPopup(popup);
+    return base({
+      stepId: explained.stepId,
+      stageId: explained.stageId,
+      displayText: explained.displayText,
+      voiceText: explained.voiceText,
     });
   }
 
