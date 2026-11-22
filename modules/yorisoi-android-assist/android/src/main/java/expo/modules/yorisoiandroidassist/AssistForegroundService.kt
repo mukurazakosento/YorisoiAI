@@ -93,8 +93,9 @@ class AssistForegroundService : Service() {
   private var captureWidth = 720
   private var captureHeight = 1280
   private var captureDpi = 320
-  /** Dedupe notify/TTS: only announce when stepId advances. */
+  /** Dedupe notify/TTS: step + stage (re-announce on stage change / unreadable recovery). */
   private var announcedStepId: String = ""
+  private var announcedStageId: String = ""
 
   private val loopRunnable = object : Runnable {
     override fun run() {
@@ -190,6 +191,7 @@ class AssistForegroundService : Service() {
 
     AssistNotifier.ensureChannel(this)
     announcedStepId = ""
+    announcedStageId = ""
     lastStepId = ""
     val notification = AssistNotifier.buildForegroundNotification(
       this,
@@ -326,29 +328,41 @@ class AssistForegroundService : Service() {
       YorisoiAndroidAssistModule.emitFrame(frameCount, text.length)
 
       val normalized = text.replace("\\s+".toRegex(), " ").trim()
-      if (normalized.isEmpty()) {
+      if (normalized.isNotEmpty() && normalized == lastOcrText) {
         return
       }
-      if (normalized == lastOcrText) {
-        return
+      if (normalized.isNotEmpty()) {
+        lastOcrText = normalized
       }
-      lastOcrText = normalized
 
-      val guidance = AssistGuidanceRules.buildNextStep(
-        featureId = featureId,
-        goalSummary = goalSummary,
-        ocrText = normalized,
-      )
-      // OCR noise / same step → do not re-notify or re-speak
-      if (!AssistGuidanceRules.shouldAnnounce(announcedStepId, guidance.stepId)) {
+      val guidance = if (normalized.isEmpty()) {
+        AssistGuidanceRules.unreadableStep()
+      } else {
+        AssistGuidanceRules.buildNextStep(
+          featureId = featureId,
+          goalSummary = goalSummary,
+          ocrText = normalized,
+        )
+      }
+      // Same step/stage → skip; stage change or unreadable recovery → re-announce
+      if (
+        !AssistGuidanceRules.shouldAnnounce(
+          announcedStepId,
+          guidance.stepId,
+          announcedStageId,
+          guidance.stageId,
+        )
+      ) {
         return
       }
       announcedStepId = guidance.stepId
+      announcedStageId = guidance.stageId
       lastStepId = guidance.stepId
       lastGuidance = guidance.displayText
+      // Don't spam identical notification body
       AssistNotifier.showGuidance(this, "よりそいAI", guidance.displayText)
       if (voiceEnabled) {
-        tts?.speak(guidance.voiceText)
+        tts?.speakLatest(guidance.voiceText)
       }
       YorisoiAndroidAssistModule.emitOcrChanged(
         text = normalized,
@@ -356,6 +370,7 @@ class AssistForegroundService : Service() {
         voiceText = guidance.voiceText,
         mode = guidance.mode,
         stepId = guidance.stepId,
+        stageId = guidance.stageId,
       )
     } catch (e: Exception) {
       YorisoiAndroidAssistModule.emitError(

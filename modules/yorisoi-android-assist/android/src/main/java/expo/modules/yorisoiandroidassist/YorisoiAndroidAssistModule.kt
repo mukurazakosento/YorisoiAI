@@ -45,6 +45,7 @@ class YorisoiAndroidAssistModule : Module() {
       voiceText: String,
       mode: String,
       stepId: String,
+      stageId: String = "",
     ) {
       eventEmitter?.invoke(
         "onOcrChanged",
@@ -54,6 +55,7 @@ class YorisoiAndroidAssistModule : Module() {
           "voiceText" to voiceText,
           "mode" to mode,
           "stepId" to stepId,
+          "stageId" to stageId,
           "timestamp" to System.currentTimeMillis(),
         ),
       )

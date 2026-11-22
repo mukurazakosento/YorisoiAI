@@ -22,6 +22,8 @@ function read(rel) {
 const speechSrc = read('src/services/speech/index.ts');
 assert.match(speechSrc, /expo-speech/);
 assert.match(speechSrc, /Speech\.speak/);
+assert.match(speechSrc, /speakLatest/);
+assert.match(speechSrc, /pendingLatest/);
 assert.match(speechSrc, /pauseSpeaking/);
 assert.match(speechSrc, /resumeSpeaking/);
 assert.match(speechSrc, /stopSpeaking/);
@@ -59,7 +61,7 @@ assert.match(safetyPanel, /voiceText/);
 
 // Phase A 以降、相談画面はシェルのみ。発話配線は支援セッションへ。
 const sessionScreen = read('src/screens/SupportSessionScreen.tsx');
-assert.match(sessionScreen, /speak\(/);
+assert.match(sessionScreen, /speakLatest\(/);
 assert.match(sessionScreen, /stopSpeaking/);
 assert.match(sessionScreen, /settings\.voiceEnabled/);
 assert.match(sessionScreen, /settings\.speechRate/);

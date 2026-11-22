@@ -30,7 +30,11 @@ const DEFAULT_LANGUAGE = 'ja-JP';
 let session: SpeechSession | null = null;
 let status: SpeechStatus = 'idle';
 /** stop() 由来か、pause 代替の stop かを区別する */
-let stopIntent: 'none' | 'user_stop' | 'restart' | 'pause_fallback' = 'none';
+let stopIntent: 'none' | 'user_stop' | 'restart' | 'pause_fallback' | 'queue_advance' =
+  'none';
+/** Latest-only pending utterance while speaking (serial queue of size 1). */
+let pendingLatest: SpeechSession | null = null;
+let lastSpokenText: string | null = null;
 
 const listeners = new Set<(next: SpeechStatus) => void>();
 
@@ -74,9 +78,11 @@ export function clampSpeechRate(rate: number): number {
 }
 
 /**
- * 読み上げ開始。直前の発話は止めてから新しい文章を読む。
+ * 読み上げ開始（レガシー互換）。進行中なら止めてから読む。
+ * 支援セッションの連続案内には [speakLatest] を使う。
  */
 export async function speak(options: SpeakOptions): Promise<void> {
+  pendingLatest = null;
   const text = options.text.trim();
   if (!text) {
     return;
@@ -95,6 +101,41 @@ export async function speak(options: SpeakOptions): Promise<void> {
     // 停止失敗でも新規読み上げは試みる
   }
 
+  beginUtterance(nextSession);
+}
+
+/**
+ * 直列 TTS: 発話中は止めず、最新の一文だけを待ち行列に残す。
+ * 終了後に最新だけを一度読む。同じ文の重複はしない。
+ */
+export async function speakLatest(options: SpeakOptions): Promise<void> {
+  const text = options.text.trim();
+  if (!text) {
+    return;
+  }
+
+  const nextSession: SpeechSession = {
+    text,
+    rate: clampSpeechRate(options.rate),
+    language: options.language?.trim() || DEFAULT_LANGUAGE,
+  };
+
+  if (status === 'speaking') {
+    if (session?.text === text || pendingLatest?.text === text) {
+      return;
+    }
+    pendingLatest = nextSession;
+    return;
+  }
+
+  if (text === lastSpokenText && !pendingLatest) {
+    return;
+  }
+
+  beginUtterance(nextSession);
+}
+
+function beginUtterance(nextSession: SpeechSession): void {
   session = nextSession;
   setStatus('speaking');
 
@@ -106,7 +147,15 @@ export async function speak(options: SpeakOptions): Promise<void> {
       setStatus('speaking');
     },
     onDone: () => {
+      lastSpokenText = session?.text ?? lastSpokenText;
       stopIntent = 'none';
+      const next = pendingLatest;
+      pendingLatest = null;
+      if (next && next.text !== lastSpokenText) {
+        stopIntent = 'queue_advance';
+        beginUtterance(next);
+        return;
+      }
       setStatus('idle');
     },
     onStopped: () => {
@@ -115,14 +164,15 @@ export async function speak(options: SpeakOptions): Promise<void> {
         setStatus('paused');
         return;
       }
-      if (stopIntent === 'restart') {
-        // speak() 先頭の stop。新しい speak の onStart が続く
+      if (stopIntent === 'restart' || stopIntent === 'queue_advance') {
         return;
       }
+      pendingLatest = null;
       stopIntent = 'none';
       setStatus('idle');
     },
     onError: () => {
+      pendingLatest = null;
       stopIntent = 'none';
       setStatus('idle');
     },
@@ -130,6 +180,7 @@ export async function speak(options: SpeakOptions): Promise<void> {
 }
 
 export async function stopSpeaking(): Promise<void> {
+  pendingLatest = null;
   stopIntent = 'user_stop';
   try {
     await Speech.stop();

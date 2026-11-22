@@ -48,6 +48,7 @@ npm run typecheck
 npm run smoke:capture
 npm run smoke:android-assist
 npm run smoke:android-assist-guidance
+npm run smoke:assist-ux-four
 npm run smoke:on-device
 npm run smoke:session
 npm run smoke:speech

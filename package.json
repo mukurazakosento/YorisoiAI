@@ -48,7 +48,8 @@
     "smoke:on-device": "node --import tsx scripts/smoke-on-device-ai-phase-c.mjs",
     "smoke:capture": "node --import tsx scripts/smoke-capture-phase-d.mjs",
     "smoke:android-assist": "node --import tsx scripts/smoke-android-assist.mjs",
-    "smoke:android-assist-guidance": "node --import tsx scripts/smoke-android-assist-guidance.mjs"
+    "smoke:android-assist-guidance": "node --import tsx scripts/smoke-android-assist-guidance.mjs",
+    "smoke:assist-ux-four": "node --import tsx scripts/smoke-assist-ux-four.mjs"
   },
   "private": true
 }

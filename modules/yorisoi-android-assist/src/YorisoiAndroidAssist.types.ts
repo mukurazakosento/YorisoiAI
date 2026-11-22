@@ -46,6 +46,7 @@ export type AndroidAssistOcrChangedEvent = {
   /** Always "demo" until native Llama is connected. */
   mode: string;
   stepId: string;
+  stageId?: string;
   timestamp: number;
 };
 
