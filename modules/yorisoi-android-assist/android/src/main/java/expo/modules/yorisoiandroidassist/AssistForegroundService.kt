@@ -96,6 +96,10 @@ class AssistForegroundService : Service() {
   /** Dedupe notify/TTS: step + stage (re-announce on stage change / unreadable recovery). */
   private var announcedStepId: String = ""
   private var announcedStageId: String = ""
+  /** Popup stability: same fingerprint across consecutive captures before announce. */
+  private var pendingPopupFingerprint: String? = null
+  private var popupStreak: Int = 0
+  private var announcedPopupFingerprint: String? = null
 
   private val loopRunnable = object : Runnable {
     override fun run() {
@@ -192,6 +196,9 @@ class AssistForegroundService : Service() {
     AssistNotifier.ensureChannel(this)
     announcedStepId = ""
     announcedStageId = ""
+    pendingPopupFingerprint = null
+    popupStreak = 0
+    announcedPopupFingerprint = null
     lastStepId = ""
     val notification = AssistNotifier.buildForegroundNotification(
       this,
@@ -328,22 +335,13 @@ class AssistForegroundService : Service() {
       YorisoiAndroidAssistModule.emitFrame(frameCount, text.length)
 
       val normalized = text.replace("\\s+".toRegex(), " ").trim()
-      if (normalized.isNotEmpty() && normalized == lastOcrText) {
-        return
-      }
+      val ocrChanged = normalized != lastOcrText
       if (normalized.isNotEmpty()) {
         lastOcrText = normalized
       }
 
-      val guidance = if (normalized.isEmpty()) {
-        AssistGuidanceRules.unreadableStep()
-      } else {
-        AssistGuidanceRules.buildNextStep(
-          featureId = featureId,
-          goalSummary = goalSummary,
-          ocrText = normalized,
-        )
-      }
+      val guidance = resolveGuidance(normalized, ocrChanged) ?: return
+
       // Same step/stage → skip; stage change or unreadable recovery → re-announce
       if (
         !AssistGuidanceRules.shouldAnnounce(
@@ -385,6 +383,57 @@ class AssistForegroundService : Service() {
       }
       capturing.set(false)
     }
+  }
+
+  /**
+   * Popup-first path: stable dialog → grounded explain (dedupe by fingerprint).
+   * Else feature path: textExplanation uses OCR summary; operationSupport uses stages.
+   * Returns null when nothing new to announce this capture.
+   */
+  private fun resolveGuidance(
+    normalized: String,
+    ocrChanged: Boolean,
+  ): AssistGuidanceRules.Step? {
+    if (normalized.isEmpty()) {
+      pendingPopupFingerprint = null
+      popupStreak = 0
+      return AssistGuidanceRules.unreadableStep()
+    }
+
+    val detection = AssistPopupDetector.detect(normalized)
+    if (detection != null) {
+      if (detection.fingerprint == pendingPopupFingerprint) {
+        popupStreak += 1
+      } else {
+        pendingPopupFingerprint = detection.fingerprint
+        popupStreak = 1
+      }
+      val stable = AssistPopupDetector.isStable(pendingPopupFingerprint, detection, popupStreak)
+      if (!stable) {
+        // Wait for a second matching sample (~3s later) before speaking.
+        return null
+      }
+      if (announcedPopupFingerprint == detection.fingerprint) {
+        return null
+      }
+      announcedPopupFingerprint = detection.fingerprint
+      return AssistPopupExplainer.explain(detection)
+    }
+
+    // Dialog gone — resume stage / text guidance.
+    pendingPopupFingerprint = null
+    popupStreak = 0
+    announcedPopupFingerprint = null
+
+    if (!ocrChanged && announcedStepId.isNotEmpty() && announcedStageId != "unreadable") {
+      return null
+    }
+
+    return AssistGuidanceRules.buildNextStep(
+      featureId = featureId,
+      goalSummary = goalSummary,
+      ocrText = normalized,
+    )
   }
 
   private fun updateForeground(body: String) {

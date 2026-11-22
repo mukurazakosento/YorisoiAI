@@ -4,13 +4,14 @@ import { StyleSheet, View } from 'react-native';
 import { AppHeader } from '../components/AppHeader';
 import { FeatureButton } from '../components/FeatureButton';
 import { Screen } from '../components/Screen';
-import { FEATURES } from '../constants/features';
+import { HOME_FEATURES } from '../constants/features';
 import type { RootStackParamList } from '../types/navigation';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
 /**
- * ホーム: 左「よりそいAI」／右設定／3ボタンのみ。フッターなし・スクロールなし。
+ * ホーム: 左「よりそいAI」／右設定／操作支援＋文章説明のみ。
+ * 安全性チェックはコードに残しホーム非表示。フッターなし・スクロールなし。
  */
 export function HomeScreen({ navigation }: Props) {
   return (
@@ -22,7 +23,7 @@ export function HomeScreen({ navigation }: Props) {
       />
 
       <View style={styles.list}>
-        {FEATURES.map((feature) => (
+        {HOME_FEATURES.map((feature) => (
           <FeatureButton
             key={feature.id}
             title={feature.title}

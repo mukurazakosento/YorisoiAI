@@ -6,7 +6,10 @@ export type FeatureDefinition = {
   description: string;
 };
 
-/** ホーム画面の3機能。文言は最終製品仕様に合わせる。 */
+/**
+ * 全機能定義（コード・ナビ・スモーク用）。
+ * ホーム表示は HOME_FEATURES（安全性チェックは非表示・削除しない）。
+ */
 export const FEATURES: FeatureDefinition[] = [
   {
     id: 'operationSupport',
@@ -24,6 +27,11 @@ export const FEATURES: FeatureDefinition[] = [
     description: '電話・メールなどの注意点を一緒に確認します。',
   },
 ];
+
+/** ホームに出す機能のみ（操作支援＋文章説明）。 */
+export const HOME_FEATURES: FeatureDefinition[] = FEATURES.filter(
+  (f) => f.id !== 'safetyCheck',
+);
 
 export function getFeatureById(id: FeatureId): FeatureDefinition {
   const feature = FEATURES.find((item) => item.id === id);

@@ -24,7 +24,7 @@
 
 | 経路 | 状態 |
 | --- | --- |
-| EAS preview **APK**（Android 実機） | スクショ OCR に加え、**同意＋画面共有許可後**に MediaProjection＋FGS で背面支援（約3秒・OCR変化時のみ案内・通知/TTS）。**実機未検証なら成功と書かない** |
+| EAS preview **APK**（Android 実機） | スクショ OCR に加え、**同意＋画面共有許可後**に MediaProjection＋FGS で背面支援（約3秒・OCR／ポップアップ安定検知→案内・通知/TTS）。**実機未検証なら成功と書かない** |
 | EAS development build（iPhone 実機） | 手動スクショ OCR。Broadcast / MediaProjection 背面支援は **なし** |
 | Broadcast Upload 定期フレーム（iOS） | **未リンク** |
 | Expo Go / Web | ライブ収録・ネイティブ OCR・背面支援は **動きません**（不可と明示） |
@@ -185,6 +185,7 @@ npm start
 npm run typecheck
 npm run smoke:capture
 npm run smoke:android-assist
+npm run smoke:popup-auto-assist
 npm run smoke:on-device
 npm run smoke:session
 npm run smoke:speech

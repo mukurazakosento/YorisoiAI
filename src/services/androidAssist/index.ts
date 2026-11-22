@@ -27,6 +27,16 @@ export {
 } from './guidanceFromOcr';
 
 export {
+  containsSensitive,
+  detectPopup,
+  explainPopup,
+  explainScreenText,
+  isPopupStable,
+  redactSecretsForVoice,
+} from './popupDetect';
+export type { PopupDetection, PopupExplainStep, PopupKind } from './popupDetect';
+
+export {
   applyOcrTextForTests,
   getAndroidAssistSessionState,
   pauseAndroidAssistSession,
