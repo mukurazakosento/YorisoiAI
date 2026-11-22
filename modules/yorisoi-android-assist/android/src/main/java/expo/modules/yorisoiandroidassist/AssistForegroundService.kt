@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Foreground Service that owns the single VirtualDisplay for background assist.
- * Captures ~every 3s, runs on-device Japanese OCR, notifies on text change.
+ * Captures on a feature interval (ops ~20s, textExplanation ~4s), runs on-device Japanese OCR, notifies on text change.
  * Does not tap or send on behalf of the user. Does not persist images.
  */
 class AssistForegroundService : Service() {
@@ -160,8 +160,9 @@ class AssistForegroundService : Service() {
         goalSummary = intent.getStringExtra(EXTRA_GOAL).orEmpty()
         featureId = intent.getStringExtra(EXTRA_FEATURE) ?: "operationSupport"
         voiceEnabled = intent.getBooleanExtra(EXTRA_VOICE, true)
-        // Allow ~10–60s; default 20s. Old 3s default / 10s clamp was a root cause of spam + delayed popup explain.
-        intervalMs = intent.getLongExtra(EXTRA_INTERVAL_MS, DEFAULT_INTERVAL_MS).coerceIn(10000L, 60000L)
+        // Allow ~3–60s. Ops defaults to 20s; textExplanation uses ~4s so transient dialogs are not missed.
+        // Old min 10s clamp blocked fast popup polling for 文章説明.
+        intervalMs = intent.getLongExtra(EXTRA_INTERVAL_MS, DEFAULT_INTERVAL_MS).coerceIn(3000L, 60000L)
         tts?.setEnabled(voiceEnabled)
         startProjectionSession()
         return START_STICKY
@@ -414,14 +415,18 @@ class AssistForegroundService : Service() {
         pendingPopupFingerprint = detection.fingerprint
         popupStreak = 1
       }
-      // At ~20s interval, requiring 2 frames delayed popups ~40s (textExplanation miss).
-      // Strong dialogs (known kind + buttons) announce on first OCR hit; weak need 2.
-      val needed = AssistPopupDetector.requiredStreak(detection, intervalMs)
+      // textExplanation: always streak 1 (dialogs are brief). Ops: 1 at ≥15s / strong, else 2.
+      val needed = AssistPopupDetector.requiredStreak(detection, intervalMs, featureId)
       val stable = AssistPopupDetector.isStable(pendingPopupFingerprint, detection, popupStreak, needed)
       if (!stable) {
+        // Do not go silent for 文章説明 while waiting — summarize OCR now.
+        if (featureId == "textExplanation" && ocrChanged) {
+          return AssistPopupExplainer.explainScreenText(normalized)
+        }
         return null
       }
       if (announcedPopupFingerprint == detection.fingerprint) {
+        // Same dialog still visible: ops stays quiet; textExplanation already explained.
         return null
       }
       announcedPopupFingerprint = detection.fingerprint

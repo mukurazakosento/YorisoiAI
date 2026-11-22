@@ -3,6 +3,7 @@ import {
   buildGuidanceFromOcrText,
   shouldAnnounceGuidanceStep,
 } from './guidanceFromOcr';
+import { assistIntervalForFeature, clampAssistIntervalMs } from './intervals';
 import type {
   AndroidAssistGuidance,
   AndroidAssistSessionState,
@@ -191,11 +192,14 @@ export async function startAndroidAssistSession(
       return getAndroidAssistSessionState();
     }
 
+    const intervalMs = clampAssistIntervalMs(
+      input.intervalMs ?? assistIntervalForFeature(input.featureId),
+    );
     await assist.startAndroidAssistNative({
       featureId: input.featureId,
       goalSummary: input.goalSummary,
       voiceEnabled: input.voiceEnabled !== false,
-      intervalMs: input.intervalMs ?? 20000,
+      intervalMs,
     });
 
     setState({

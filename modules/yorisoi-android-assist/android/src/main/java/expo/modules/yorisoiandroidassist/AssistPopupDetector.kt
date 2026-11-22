@@ -56,10 +56,18 @@ object AssistPopupDetector {
 
   /**
    * How many consecutive matching samples before announce.
+   * textExplanation → always 1 (permission dialogs are often gone before a 2nd sample).
    * Long capture intervals (≥15s) → 1 (second sample would wait another full cycle).
    * Strong dialogs (known kind + buttons) → 1 even on shorter intervals.
    */
-  fun requiredStreak(detection: Detection, intervalMs: Long): Int {
+  fun requiredStreak(
+    detection: Detection,
+    intervalMs: Long,
+    featureId: String = "operationSupport",
+  ): Int {
+    if (featureId == "textExplanation") {
+      return 1
+    }
     if (intervalMs >= 15_000L) {
       return 1
     }
@@ -86,7 +94,8 @@ object AssistPopupDetector {
       n.contains("許可") ||
         n.contains("アクセス") ||
         n.contains("使ってよろしい") ||
-        n.contains("使用を許可")
+        n.contains("使用を許可") ||
+        n.contains("使用することを許可")
     val termsCue =
       n.contains("利用規約") ||
         n.contains("プライバシー") ||
@@ -96,7 +105,8 @@ object AssistPopupDetector {
       n.contains("アップデート") ||
         n.contains("更新があります") ||
         n.contains("新しいバージョン") ||
-        n.contains("インストール")
+        n.contains("インストール") ||
+        (n.contains("更新") && (n.contains("後で") || n.contains("今はしない")))
     val questionCue =
       n.contains("しますか") ||
         n.contains("よろしいですか") ||
@@ -108,13 +118,42 @@ object AssistPopupDetector {
         n.contains("拒否") ||
         n.contains("キャンセル") ||
         n.contains("一度だけ") ||
+        n.contains("今回のみ") ||
         n.contains("アプリの使用中") ||
         n.contains("許可する") ||
-        n.contains("同意")
+        n.contains("同意") ||
+        n.contains("後で") ||
+        n.contains("今はしない")
+    // Body mentions a permission topic even when OCR missed 「しますか」 / buttons.
+    val softPermissionBody =
+      (n.contains("アクセス") || n.contains("許可")) &&
+        (n.contains("カメラ") ||
+          n.contains("マイク") ||
+          n.contains("写真") ||
+          n.contains("画像") ||
+          n.contains("動画") ||
+          n.contains("音楽") ||
+          n.contains("メディア") ||
+          n.contains("位置") ||
+          n.contains("通知") ||
+          n.contains("連絡先") ||
+          n.contains("ファイル") ||
+          n.contains("ストレージ") ||
+          n.contains("bluetooth"))
+    // Typical system permission button cluster (body OCR often empty).
+    val permissionButtonCluster =
+      n.contains("許可しない") &&
+        (n.contains("一度だけ") ||
+          n.contains("今回のみ") ||
+          n.contains("アプリの使用中") ||
+          n.contains("許可する") ||
+          n.contains("許可"))
     return (permissionCue && (questionCue || buttonCue)) ||
-      (termsCue && buttonCue) ||
+      (termsCue && (buttonCue || questionCue)) ||
       (updateCue && (questionCue || buttonCue)) ||
-      (permissionCue && buttonCue)
+      (permissionCue && buttonCue) ||
+      softPermissionBody ||
+      permissionButtonCluster
   }
 
   private fun classifyKind(n: String): PopupKind {
