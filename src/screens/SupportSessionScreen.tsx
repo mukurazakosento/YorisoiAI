@@ -50,7 +50,7 @@ import {
 import {
   SPEECH_DISABLED_HELP,
   replaySpeaking,
-  speak,
+  speakLatest,
   stopSpeaking,
 } from '../services/speech';
 import type { RootStackParamList } from '../types/navigation';
@@ -77,7 +77,6 @@ export function SupportSessionScreen({ navigation, route }: Props) {
   const [script, setScript] = useState<SessionScript | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
   const [tone, setTone] = useState<SessionStepTone>('normal');
-  const [notifyHint, setNotifyHint] = useState('通知の準備中…');
   const [capture, setCapture] = useState<CaptureSessionState>(() =>
     getCaptureSessionState(),
   );
@@ -146,7 +145,6 @@ export function SupportSessionScreen({ navigation, route }: Props) {
     });
     setStepIndex(0);
     setTone('normal');
-    setNotifyHint('背面支援が案内を更新しました（デモ判定）。');
   }, [androidAssist.lastGuidance, phase]);
 
   // セッション開始: 端末内AI（未接続時はデモ）＋収録境界＋通知許可＋任意の背面支援
@@ -161,21 +159,15 @@ export function SupportSessionScreen({ navigation, route }: Props) {
       const guidance = await buildGuidanceScript({ featureId, summary });
       setScript(guidance.script);
 
-      const permission = await ensureNotificationPermission();
-      setNotifyHint(permission.detail);
+      await ensureNotificationPermission();
 
       if (wantsBackgroundAssist) {
-        const assistState = await startAndroidAssistSession({
+        await startAndroidAssistSession({
           featureId,
           goalSummary: summary,
           voiceEnabled: settings.voiceEnabled,
           intervalMs: 3000,
         });
-        if (assistState.phase === 'running') {
-          setNotifyHint('背面支援を開始しました。他のアプリへ切り替えてください。');
-        } else if (assistState.statusMessage) {
-          setNotifyHint(assistState.statusMessage);
-        }
       }
 
       setPhase('guiding');
@@ -205,18 +197,10 @@ export function SupportSessionScreen({ navigation, route }: Props) {
       return;
     }
 
-    void presentInstructionNotification(displayText).then((result) => {
-      if (!result.ok && result.reason) {
-        setNotifyHint(
-          typeof result.reason === 'string' && result.reason.length > 8
-            ? result.reason
-            : '通知の代わりに、画面の文字で案内しています。',
-        );
-      }
-    });
+    void presentInstructionNotification(displayText);
 
     if (settings.voiceEnabled) {
-      void speak({
+      void speakLatest({
         text: voiceText || displayText,
         rate: settings.speechRate,
         language: 'ja-JP',
@@ -245,18 +229,10 @@ export function SupportSessionScreen({ navigation, route }: Props) {
       return;
     }
 
-    void presentEndSupportNotification().then((result) => {
-      if (!result.ok) {
-        setNotifyHint(
-          '通知が使えないため、下のボタンから支援を終了してください。',
-        );
-      } else {
-        setNotifyHint('通知「ここをタップで支援を終了」も送りました。');
-      }
-    });
+    void presentEndSupportNotification();
 
     if (settings.voiceEnabled) {
-      void speak({
+      void speakLatest({
         text: END_SUPPORT_VOICE,
         rate: settings.speechRate,
         language: 'ja-JP',
@@ -327,7 +303,6 @@ export function SupportSessionScreen({ navigation, route }: Props) {
         setStepIndex(0);
         setTone('normal');
         setPhase('guiding');
-        setNotifyHint('確認した画面の文字に合わせて案内を更新しました。');
       } finally {
         setGuidanceBusy(false);
       }
@@ -335,15 +310,88 @@ export function SupportSessionScreen({ navigation, route }: Props) {
   };
 
   const aiDemo = !isOnDeviceAiReady() || script?.isDemo !== false;
-  const stepLabel =
-    script && phase === 'guiding'
-      ? `次の一手（${stepIndex + 1}/${script.steps.length}）`
-      : phase === 'offer_end'
-        ? '案内は終わりです'
-        : '準備中…';
+  const assistActive =
+    wantsBackgroundAssist &&
+    (androidAssist.phase === 'running' || androidAssist.phase === 'paused');
+  // 背面支援中は手動OCRパネルを隠し、一手だけに集中（確認中は表示）
+  const showCapturePanel =
+    phase !== 'starting' && (!assistActive || reviewingCapture);
+
+  const nextLabel =
+    phase === 'offer_end'
+      ? END_SUPPORT_DISPLAY
+      : phase === 'starting'
+        ? '案内を準備しています…'
+        : displayText;
+
+  const footer = (
+    <View style={styles.footerInner}>
+      {phase === 'guiding' && !reviewingCapture ? (
+        <>
+          <PrimaryButton
+            label="できた"
+            onPress={handleDone}
+            disabled={guidanceBusy}
+          />
+          <View style={styles.secondaryRow}>
+            <View style={styles.secondaryHalf}>
+              <PrimaryButton
+                label="分からない"
+                variant="secondary"
+                onPress={handleSimplify}
+              />
+            </View>
+            <View style={styles.secondaryHalf}>
+              <PrimaryButton
+                label="もう一度"
+                variant="secondary"
+                onPress={handleReplay}
+                disabled={!settings.voiceEnabled}
+              />
+            </View>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            onPress={goEndSupport}
+            style={styles.endLink}
+          >
+            <Text
+              style={[styles.endLinkText, { fontSize: fontSize(baseFontSizes.caption) }]}
+            >
+              終了
+            </Text>
+          </Pressable>
+        </>
+      ) : null}
+
+      {phase === 'offer_end' ? (
+        <>
+          <PrimaryButton label="終了する" onPress={goEndSupport} />
+          <PrimaryButton
+            label="もう一度"
+            variant="secondary"
+            onPress={handleReplay}
+            disabled={!settings.voiceEnabled}
+          />
+        </>
+      ) : null}
+
+      {phase === 'starting' ? (
+        <PrimaryButton label="準備中…" disabled onPress={() => {}} />
+      ) : null}
+
+      {reviewingCapture ? (
+        <PrimaryButton
+          label="この文字で進む"
+          onPress={handleConfirmDraft}
+          disabled={guidanceBusy}
+        />
+      ) : null}
+    </View>
+  );
 
   return (
-    <Screen contentStyle={styles.content}>
+    <Screen contentStyle={styles.content} footer={footer}>
       <AppHeader
         title={feature.title}
         showBack
@@ -372,60 +420,27 @@ export function SupportSessionScreen({ navigation, route }: Props) {
             案内
           </Text>
         )}
-        <Text
-          style={[styles.stepLabel, { fontSize: fontSize(baseFontSizes.caption) }]}
-          numberOfLines={1}
-        >
-          {stepLabel}
-        </Text>
+        {assistActive ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              if (androidAssist.phase === 'paused') {
+                void resumeAndroidAssistSession();
+              } else {
+                void pauseAndroidAssistSession();
+              }
+            }}
+          >
+            <Text
+              style={[styles.assistAction, { fontSize: fontSize(baseFontSizes.caption) }]}
+            >
+              {androidAssist.phase === 'paused' ? '再開' : '一時停止'}
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
 
-      {wantsBackgroundAssist && androidAssist.phase !== 'unavailable' ? (
-        <View style={styles.assistRow}>
-          <Text
-            style={[styles.assistLabel, { fontSize: fontSize(baseFontSizes.caption) }]}
-            numberOfLines={1}
-          >
-            {androidAssist.phase === 'running'
-              ? `背面支援中（${androidAssist.frameCount}）`
-              : androidAssist.phase === 'paused'
-                ? '背面支援：一時停止'
-                : androidAssist.phase === 'requesting'
-                  ? '画面共有の許可…'
-                  : androidAssist.statusMessage ?? '背面支援'}
-          </Text>
-          {androidAssist.phase === 'running' ? (
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => {
-                void pauseAndroidAssistSession();
-              }}
-            >
-              <Text
-                style={[styles.assistAction, { fontSize: fontSize(baseFontSizes.caption) }]}
-              >
-                一時停止
-              </Text>
-            </Pressable>
-          ) : null}
-          {androidAssist.phase === 'paused' ? (
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => {
-                void resumeAndroidAssistSession();
-              }}
-            >
-              <Text
-                style={[styles.assistAction, { fontSize: fontSize(baseFontSizes.caption) }]}
-              >
-                再開
-              </Text>
-            </Pressable>
-          ) : null}
-        </View>
-      ) : null}
-
-      {phase !== 'starting' ? (
+      {showCapturePanel ? (
         <SessionCapturePanel
           featureId={featureId}
           capture={capture}
@@ -442,20 +457,22 @@ export function SupportSessionScreen({ navigation, route }: Props) {
       ) : null}
 
       {!reviewingCapture ? (
-        <View style={styles.instructionCard}>
+        <View style={styles.instructionBlock}>
+          <Text
+            style={[styles.nextEyebrow, { fontSize: fontSize(baseFontSizes.caption) }]}
+            numberOfLines={1}
+          >
+            次にすること
+          </Text>
           <Text
             style={[
               styles.displayText,
               { fontSize: fontSize(baseFontSizes.title) },
             ]}
-            numberOfLines={3}
+            numberOfLines={2}
             accessibilityRole="header"
           >
-            {phase === 'offer_end'
-              ? END_SUPPORT_DISPLAY
-              : phase === 'starting'
-                ? '案内を準備しています…'
-                : displayText}
+            {nextLabel}
           </Text>
           {!settings.voiceEnabled ? (
             <Text
@@ -465,92 +482,22 @@ export function SupportSessionScreen({ navigation, route }: Props) {
               {SPEECH_DISABLED_HELP}
             </Text>
           ) : null}
-          {notifyHint && !notifyHint.startsWith('通知の準備') ? (
-            <Text
-              style={[styles.notifyHint, { fontSize: fontSize(baseFontSizes.caption) }]}
-              numberOfLines={1}
-            >
-              {notifyHint}
-            </Text>
-          ) : null}
         </View>
       ) : null}
-
-      <View style={styles.actions}>
-        {phase === 'guiding' && !reviewingCapture ? (
-          <>
-            <PrimaryButton
-              label="できました"
-              onPress={handleDone}
-              disabled={guidanceBusy}
-            />
-            <View style={styles.secondaryRow}>
-              <View style={styles.secondaryHalf}>
-                <PrimaryButton
-                  label="分かりません"
-                  variant="secondary"
-                  onPress={handleSimplify}
-                />
-              </View>
-              <View style={styles.secondaryHalf}>
-                <PrimaryButton
-                  label="もう一度聞く"
-                  variant="secondary"
-                  onPress={handleReplay}
-                  disabled={!settings.voiceEnabled}
-                />
-              </View>
-            </View>
-            <PrimaryButton
-              label="終了する"
-              variant="secondary"
-              onPress={goEndSupport}
-            />
-          </>
-        ) : null}
-
-        {phase === 'offer_end' ? (
-          <>
-            <PrimaryButton
-              label={END_SUPPORT_DISPLAY}
-              onPress={goEndSupport}
-            />
-            <PrimaryButton
-              label="もう一度聞く"
-              variant="secondary"
-              onPress={handleReplay}
-              disabled={!settings.voiceEnabled}
-            />
-          </>
-        ) : null}
-
-        {phase === 'starting' ? (
-          <PrimaryButton label="しばらくお待ちください…" disabled onPress={() => {}} />
-        ) : null}
-      </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   content: {
-    gap: 8,
+    gap: 12,
   },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
-  },
-  assistRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  assistLabel: {
-    flex: 1,
-    color: colors.primary,
-    fontWeight: '700',
+    minHeight: 28,
   },
   assistAction: {
     color: colors.primary,
@@ -565,45 +512,44 @@ const styles = StyleSheet.create({
     color: colors.warning,
     fontWeight: '700',
   },
-  stepLabel: {
-    color: colors.textMuted,
-    fontWeight: '700',
-    flexShrink: 1,
-  },
-  instructionCard: {
+  instructionBlock: {
     flex: 1,
     minHeight: 0,
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    gap: 8,
     justifyContent: 'center',
+    gap: 14,
+    paddingVertical: 8,
+  },
+  nextEyebrow: {
+    color: colors.primary,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   displayText: {
     color: colors.text,
     fontWeight: '700',
-    lineHeight: 34,
-  },
-  notifyHint: {
-    color: colors.textSecondary,
-    lineHeight: 22,
+    lineHeight: 36,
   },
   muteHint: {
     color: colors.textMuted,
     lineHeight: 22,
   },
-  actions: {
-    gap: 8,
-    paddingBottom: 2,
+  footerInner: {
+    gap: 10,
   },
   secondaryRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 10,
   },
   secondaryHalf: {
     flex: 1,
+  },
+  endLink: {
+    alignSelf: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  endLinkText: {
+    color: colors.textMuted,
+    fontWeight: '700',
   },
 });

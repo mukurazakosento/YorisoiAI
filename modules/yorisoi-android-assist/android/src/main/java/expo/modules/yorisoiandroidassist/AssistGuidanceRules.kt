@@ -1,16 +1,14 @@
 package expo.modules.yorisoiandroidassist
 
 /**
- * Structured heuristic guidance from OCR text (demo / disconnected AI).
- * Never labeled as live AI.
- *
- * LINE photo steps only when the **goal** clearly asks to send a LINE photo.
- * Wi‑Fi / settings / phone / unknown never invent LINE steps.
- * Completion never fires on mere 「送信」「既読」「取り消し」 alone.
+ * Stage-aware heuristic guidance (demo / disconnected AI).
+ * Combines goal + OCR to detect screen stage, then one next action.
+ * Never labeled as live AI. Never false-complete on bare 送信/既読/取り消し.
  */
 object AssistGuidanceRules {
   data class Step(
     val stepId: String,
+    val stageId: String,
     val displayText: String,
     val voiceText: String,
     /** Always "demo" until native Llama is connected. */
@@ -23,24 +21,30 @@ object AssistGuidanceRules {
     ocrText: String,
   ): Step {
     val goal = normalize(goalSummary)
-    val o = normalize(ocrText)
+    val raw = ocrText.trim()
+    val o = normalize(raw)
+
+    if (raw.isEmpty() || o.isEmpty()) {
+      return unreadableStep()
+    }
 
     if (featureId == "safetyCheck") {
       return Step(
         stepId = "safety-review",
-        displayText = "画面の番号や文言をよく見てください。断定はしません。",
-        voiceText = "画面に出ている番号や文言を、ゆっくり確認してください。安全だと決めつけず、分からなければ終了して相談してください。",
+        stageId = "safety",
+        displayText = "番号や文言をよく見てください。",
+        voiceText = "画面の番号や文言をゆっくり確認してください。安全だと決めつけないでください。",
       )
     }
     if (featureId == "textExplanation") {
       return Step(
         stepId = "explain-read",
-        displayText = "画面の文を読み取りました。意味が分からなければ「分かりません」。",
-        voiceText = "いまの画面の文字を読み取りました。難しい言葉があれば、アプリに戻って「分かりません」を押してください。",
+        stageId = "explain",
+        displayText = "画面の文を読みました。分からなければ「分かりません」。",
+        voiceText = "いまの画面の文字を読みました。難しいときはアプリに戻って「分かりません」を押してください。",
       )
     }
 
-    // operationSupport (and unknown): route by goal only — never force LINE from OCR alone
     if (looksLikeLinePhotoGoal(goal)) {
       return linePhotoStep(o)
     }
@@ -57,10 +61,33 @@ object AssistGuidanceRules {
     return askClarifyStep()
   }
 
-  /** Pure helper for tests / callers: same stepId must not re-announce. */
-  fun shouldAnnounce(previousStepId: String?, nextStepId: String): Boolean {
+  fun unreadableStep(): Step {
+    return Step(
+      stepId = "ocr-unreadable",
+      stageId = "unreadable",
+      displayText = "画面をうまく読み取れませんでした。",
+      voiceText = "画面をうまく読み取れませんでした。明るいところで、もう少し待つか、アプリに戻ってください。",
+    )
+  }
+
+  /**
+   * Dedupe announce/TTS by stepId, but re-announce when stage changes
+   * or after recovery from unreadable.
+   */
+  fun shouldAnnounce(
+    previousStepId: String?,
+    nextStepId: String,
+    previousStageId: String? = null,
+    nextStageId: String? = null,
+  ): Boolean {
     if (nextStepId.isBlank()) {
       return false
+    }
+    if (previousStageId == "unreadable" && nextStageId != null && nextStageId != "unreadable") {
+      return true
+    }
+    if (previousStageId != null && nextStageId != null && previousStageId != nextStageId) {
+      return true
     }
     return previousStepId != nextStepId
   }
@@ -70,7 +97,6 @@ object AssistGuidanceRules {
     val line = g.contains("line") || g.contains("ライン") || g.contains("らいん")
     val photo = g.contains("写真") || g.contains("画像") || g.contains("アルバム")
     val sendOrGrandchild = g.contains("送") || g.contains("孫")
-    // Require LINE + photo-ish + send/grandchild — not bare LINE通知/使い方
     return line && photo && sendOrGrandchild
   }
 
@@ -94,8 +120,9 @@ object AssistGuidanceRules {
   private fun askClarifyStep(): Step {
     return Step(
       stepId = "ask-clarify",
-      displayText = "いまの画面で、やりたいことを一つ教えてください。",
-      voiceText = "いまの画面で、何をしたいか一つだけ教えてください。分からなければアプリに戻って文字で書いてください。LINEの写真送信だとは決めつけません。",
+      stageId = "clarify",
+      displayText = "やりたいことを一つ教えてください。",
+      voiceText = "いまの画面で、何をしたいか一つだけ教えてください。LINEの写真送信だとは決めつけません。",
     )
   }
 
@@ -104,36 +131,62 @@ object AssistGuidanceRules {
       o.contains("接続済み") || o.contains("接続されています") ->
         Step(
           stepId = "wifi-connected",
-          displayText = "つながっているようです。ほかにやることがなければ終了できます。",
-          voiceText = "Wi-Fiにつながっているようです。ほかにやることがなければ、通知から支援を終了してください。",
+          stageId = "wifi-connected",
+          displayText = "つながっているようです。終わってよければ終了してください。",
+          voiceText = "Wi-Fiにつながっているようです。ほかにやることがなければ、終了してください。",
+        )
+      o.contains("パスワード") || o.contains("入力") ->
+        Step(
+          stepId = "wifi-password",
+          stageId = "wifi-password",
+          displayText = "パスワードを入力してください。",
+          voiceText = "控えたWi-Fiのパスワードを入力してください。よりそいAIは代わりに入力しません。",
         )
       o.contains("wi-fi") || o.contains("wifi") || o.contains("ワイファイ") || o.contains("ネットワーク") ->
         Step(
           stepId = "wifi-pick",
+          stageId = "wifi-list",
           displayText = "使いたいWi-Fiの名前を選んでください。",
-          voiceText = "一覧から、使いたいWi-Fiの名前を一つ選んでください。パスワードを聞かれたら、控えたものを入力します。",
+          voiceText = "一覧から、使いたいWi-Fiの名前を一つ選んでください。",
+        )
+      o.contains("設定") ->
+        Step(
+          stepId = "wifi-open-from-settings",
+          stageId = "wifi-settings",
+          displayText = "「Wi-Fi」を開いてください。",
+          voiceText = "設定の中のWi-Fiを押してください。",
         )
       else ->
         Step(
           stepId = "wifi-open",
+          stageId = "wifi-start",
           displayText = "設定からWi-Fiを開いてください。",
-          voiceText = "設定アプリを開き、Wi-Fiを選んでください。よりそいAIは代わりに押しません。",
+          voiceText = "設定アプリを開き、Wi-Fiを選んでください。",
         )
     }
   }
 
   private fun phoneStep(o: String): Step {
     return when {
-      o.contains("通話") || o.contains("発信") || o.contains("着信") ->
+      o.contains("通話") || o.contains("発信") || o.contains("着信中") ->
         Step(
           stepId = "phone-review",
-          displayText = "番号をよく見てから、かけるか切るか選んでください。",
-          voiceText = "画面の番号をよく見てください。知らない番号なら、急いでかけなくて大丈夫です。",
+          stageId = "phone-active",
+          displayText = "番号をよく見てから選んでください。",
+          voiceText = "画面の番号をよく見てください。知らない番号なら、急がなくて大丈夫です。",
+        )
+      o.contains("履歴") || o.contains("着信") || o.contains("発信") ->
+        Step(
+          stepId = "phone-log",
+          stageId = "phone-log",
+          displayText = "確認したい番号を選んでください。",
+          voiceText = "履歴から、確認したい番号を一つ選んでください。",
         )
       else ->
         Step(
           stepId = "phone-open",
-          displayText = "電話アプリで、確認したい番号の画面を開いてください。",
+          stageId = "phone-start",
+          displayText = "電話アプリを開いてください。",
           voiceText = "電話アプリを開き、確認したい番号が出るところまで進めてください。",
         )
     }
@@ -141,35 +194,58 @@ object AssistGuidanceRules {
 
   private fun settingsStep(o: String): Step {
     return when {
+      o.contains("通知") && (o.contains("オン") || o.contains("オフ") || o.contains("許可")) ->
+        Step(
+          stepId = "settings-notify-toggle",
+          stageId = "settings-notify",
+          displayText = "通知のスイッチを合わせてください。",
+          voiceText = "通知のオン・オフを、必要な方へ合わせてください。一度に一つです。",
+        )
       o.contains("通知") ->
         Step(
           stepId = "settings-notify",
-          displayText = "通知のスイッチを、必要な方へ合わせてください。",
-          voiceText = "通知の項目を開き、オンやオフを必要な方へ合わせてください。一度に一つです。",
+          stageId = "settings-notify-list",
+          displayText = "「通知」を開いてください。",
+          voiceText = "一覧から通知を開いてください。",
         )
       else ->
         Step(
           stepId = "settings-open",
-          displayText = "設定で、直したい項目を一つ開いてください。",
-          voiceText = "設定アプリで、直したい項目を一つだけ開いてください。分からなければアプリに戻って聞いてください。",
+          stageId = "settings-home",
+          displayText = "直したい項目を一つ開いてください。",
+          voiceText = "設定で、直したい項目を一つだけ開いてください。",
         )
     }
   }
 
+  /**
+   * LINE photo stages (goal must already be LINE photo):
+   * home/friends → chat list → chat → album → confirm → pre-send → ask-done
+   */
   private fun linePhotoStep(o: String): Step {
-    // Safe completion: never complete on mere 送信 / 既読 / 取り消し
     if (hasClearSentConfirmation(o)) {
       return Step(
         stepId = "line-ask-done",
-        displayText = "送れたか確認してください。分からなければアプリに戻ります。",
-        voiceText = "写真が送れたか、相手の名前と一緒に確認してください。はっきり分からなければ、送れましたとは決めつけず、アプリに戻って「できました」か「分かりません」を押してください。",
+        stageId = "line-ask-done",
+        displayText = "送れたか確認してください。",
+        voiceText = "写真が送れたか、相手の名前と一緒に確認してください。分からなければアプリに戻ってください。",
       )
     }
-    if (o.contains("送信") || o.contains("送る") || o.contains("既読") || o.contains("取り消")) {
+    // Pre-send / confirm compose
+    if (o.contains("送信") || o.contains("送る")) {
       return Step(
         stepId = "line-confirm-send",
-        displayText = "内容を確かめてから「送信」を押してください。送れても自動では終わりません。",
-        voiceText = "写真と相手の名前を確かめてから、送信を押してください。送信や既読の文字だけでは、送れたとは決めつけません。よりそいAIは代わりに押しません。",
+        stageId = "line-pre-send",
+        displayText = "確かめてから「送信」を押してください。",
+        voiceText = "写真と相手を確かめてから、送信を押してください。代わりには押しません。",
+      )
+    }
+    if (o.contains("既読") || o.contains("取り消")) {
+      return Step(
+        stepId = "line-confirm-send",
+        stageId = "line-pre-send",
+        displayText = "送れても自動では終わりません。確かめてください。",
+        voiceText = "送信や既読だけでは送れたとは決めつけません。画面を確かめてください。",
       )
     }
     if (o.contains("アルバム") || o.contains("ギャラリー") || o.contains("画像を選択") ||
@@ -177,60 +253,63 @@ object AssistGuidanceRules {
     ) {
       return Step(
         stepId = "line-pick-photo",
+        stageId = "line-album",
         displayText = "送りたい写真を一つ選んでください。",
-        voiceText = "送りたい写真を一つだけ選んでください。選んだら次の案内を待ちます。",
+        voiceText = "送りたい写真を一つだけ選んでください。",
       )
     }
     if (o.contains("カメラ") && (o.contains("アルバム") || o.contains("画像") || o.contains("写真"))) {
       return Step(
         stepId = "line-choose-album",
+        stageId = "line-album-choice",
         displayText = "「アルバム」や「画像」を選んでください。",
-        voiceText = "カメラではなく、アルバムや画像を選んでください。孫に送る写真は、すでに撮ったものを使うことが多いです。",
+        voiceText = "カメラではなく、アルバムや画像を選んでください。",
       )
     }
-    if (o.contains("添付") || o.contains("アルバム") || o.contains("ギャラリー") ||
-      (o.contains("写真") && o.contains("選択"))
-    ) {
+    if (o.contains("添付") || (o.contains("写真") && o.contains("選択"))) {
       return Step(
         stepId = "line-open-attach",
-        displayText = "写真を付けるボタン（＋など）を押してください。",
-        voiceText = "トーク画面の、写真を付けるボタンやプラスを押してください。よりそいAIは代わりに押しません。",
+        stageId = "line-chat",
+        displayText = "写真ボタン（＋など）を押してください。",
+        voiceText = "トーク画面の、写真やプラスのボタンを押してください。",
       )
     }
-    if (o.contains("トーク") || o.contains("トークルーム") ||
+    if (o.contains("トークルーム") || o.contains("トーク") ||
       (o.contains("メッセージ") && !o.contains("ホーム"))
     ) {
       return Step(
         stepId = "line-in-talk",
-        displayText = "孫とのトークを開いたまま、写真ボタンを探してください。",
-        voiceText = "孫とのトーク画面です。下のほうにある写真やプラスのボタンを探して押してください。",
+        stageId = "line-chat",
+        displayText = "写真ボタンを探して押してください。",
+        voiceText = "孫とのトーク画面です。下の写真やプラスを探して押してください。",
       )
     }
-    if (o.contains("ホーム") || o.contains("友だち") || o.contains("チャット一覧")) {
+    if (o.contains("チャット一覧") || o.contains("友だち") ||
+      (o.contains("ホーム") && !o.contains("トークルーム"))
+    ) {
       return Step(
         stepId = "line-pick-friend",
+        stageId = "line-friends",
         displayText = "孫の名前のトークを開いてください。",
-        voiceText = "友だち一覧から、孫の名前を選んでトークを開いてください。",
+        voiceText = "友だち一覧から、孫の名前を選んでください。",
       )
     }
     if (o.contains("line") || o.contains("ライン")) {
       return Step(
         stepId = "line-open",
-        displayText = "まず LINE を開き、孫のトークを選んでください。",
-        voiceText = "緑のLINEアプリを開き、孫の名前のトークを選んでください。開けたらそのままで大丈夫です。",
+        stageId = "line-home",
+        displayText = "まず LINE を開いてください。",
+        voiceText = "緑のLINEアプリを開いてください。",
       )
     }
     return Step(
       stepId = "line-start",
-      displayText = "LINEを開き、孫のトークから写真を送ります。",
-      voiceText = "LINEを開き、孫のトークを選んでから写真を一つ付けてください。一度に一つです。勝手には送りません。",
+      stageId = "line-start",
+      displayText = "LINEを開き、孫のトークへ進みます。",
+      voiceText = "LINEを開き、孫のトークを選んでください。一度に一つです。",
     )
   }
 
-  /**
-   * Requires a stronger sent phrase than bare 送信/既読/取り消し.
-   * Even then we only ask the user to confirm — never auto-declare success alone.
-   */
   internal fun hasClearSentConfirmation(o: String): Boolean {
     val strongSent =
       o.contains("送信しました") ||

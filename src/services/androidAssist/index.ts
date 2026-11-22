@@ -23,6 +23,7 @@ export {
   hasClearSentConfirmation,
   looksLikeLinePhotoGoal,
   shouldAnnounceGuidanceStep,
+  unreadableGuidanceStep,
 } from './guidanceFromOcr';
 
 export {

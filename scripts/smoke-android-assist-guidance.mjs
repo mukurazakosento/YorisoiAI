@@ -152,8 +152,34 @@ const clearSent = buildGuidanceFromOcrText({
   ocrText: '孫 トーク 写真を送信しました',
 });
 assert.equal(clearSent.stepId, 'line-ask-done');
+assert.equal(clearSent.stageId, 'line-ask-done');
 assert.match(clearSent.displayText, /確認/);
 assert.doesNotMatch(clearSent.voiceText, /送れました。ほかに/);
+
+// --- stages: friends → chat → album ---
+const friends = buildGuidanceFromOcrText({
+  featureId: 'operationSupport',
+  goalSummary: 'LINEで孫に写真を送りたい',
+  ocrText: 'ホーム 友だち',
+});
+assert.equal(friends.stageId, 'line-friends');
+const chat = buildGuidanceFromOcrText({
+  featureId: 'operationSupport',
+  goalSummary: 'LINEで孫に写真を送りたい',
+  ocrText: 'トーク メッセージ',
+});
+assert.equal(chat.stageId, 'line-chat');
+assert.equal(linePick.stageId, 'line-album');
+assert.equal(lineConfirm.stageId, 'line-pre-send');
+
+// --- unreadable ---
+const unread = buildGuidanceFromOcrText({
+  featureId: 'operationSupport',
+  goalSummary: 'LINEで孫に写真を送りたい',
+  ocrText: '   ',
+});
+assert.equal(unread.stepId, 'ocr-unreadable');
+assert.match(unread.displayText, /うまく読み取れませんでした/);
 
 // --- OCR noise: same stepId → no re-announce ---
 assert.equal(shouldAnnounceGuidanceStep(null, 'line-pick-photo'), true);
@@ -166,6 +192,26 @@ assert.equal(
   true,
 );
 assert.equal(shouldAnnounceGuidanceStep('wifi-open', ''), false);
+// stage change re-announces even if stepId somehow same key space
+assert.equal(
+  shouldAnnounceGuidanceStep(
+    'line-in-talk',
+    'line-in-talk',
+    'line-chat',
+    'line-album',
+  ),
+  true,
+);
+// recovery from unreadable
+assert.equal(
+  shouldAnnounceGuidanceStep(
+    'ocr-unreadable',
+    'line-pick-photo',
+    'unreadable',
+    'line-album',
+  ),
+  true,
+);
 
 const a = buildGuidanceFromOcrText({
   featureId: 'operationSupport',
@@ -178,6 +224,17 @@ const b = buildGuidanceFromOcrText({
   ocrText: 'アルバム B 別の写真',
 });
 assert.equal(a.stepId, b.stepId);
-assert.equal(shouldAnnounceGuidanceStep(a.stepId, b.stepId), false);
+assert.equal(a.stageId, b.stageId);
+assert.equal(
+  shouldAnnounceGuidanceStep(a.stepId, b.stepId, a.stageId, b.stageId),
+  false,
+);
+
+const tts = read(
+  'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistTtsHelper.kt',
+);
+assert.match(tts, /UtteranceProgressListener/);
+assert.match(tts, /speakLatest|pendingText/);
+assert.match(tts, /onDone/);
 
 console.log('smoke-android-assist-guidance: OK');

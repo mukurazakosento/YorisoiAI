@@ -26,6 +26,8 @@ export type AndroidAssistSessionPhase =
 
 export type AndroidAssistGuidance = {
   stepId: string;
+  /** Screen stage (e.g. line-friends, line-chat, wifi-list). */
+  stageId?: string;
   displayText: string;
   voiceText: string;
   /** Never "live" while native Llama is disconnected. */

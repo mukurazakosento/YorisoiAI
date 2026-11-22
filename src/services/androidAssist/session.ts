@@ -103,12 +103,22 @@ async function bindNativeEvents(): Promise<void> {
   unsubs.push(
     assist.subscribeAndroidAssistOcrChanged((event) => {
       const previousId = state.lastGuidance?.stepId;
-      // Native already dedupes; keep JS guard so UI/TTS never double-fire same step.
-      if (!shouldAnnounceGuidanceStep(previousId, event.stepId)) {
+      const previousStage = state.lastGuidance?.stageId;
+      const nextStage = event.stageId ?? null;
+      // Native already dedupes; keep JS guard (stage-aware).
+      if (
+        !shouldAnnounceGuidanceStep(
+          previousId,
+          event.stepId,
+          previousStage,
+          nextStage,
+        )
+      ) {
         return;
       }
       const guidance: AndroidAssistGuidance = {
         stepId: event.stepId,
+        stageId: event.stageId,
         displayText: event.displayText,
         voiceText: event.voiceText,
         mode: event.mode === 'demo' ? 'demo' : 'offline',

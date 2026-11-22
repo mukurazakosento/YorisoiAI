@@ -105,6 +105,13 @@ assert.doesNotMatch(support, /\bScrollView\b/);
 assert.match(support, /startAndroidAssistSession|backgroundAssist/);
 assert.match(support, /stopAndroidAssistSession/);
 assert.match(support, /デモ/);
+assert.match(support, /次にすること/);
+assert.match(support, /footer/);
+assert.match(support, /speakLatest/);
+
+const screenComp = read('src/components/Screen.tsx');
+assert.match(screenComp, /footer/);
+assert.match(screenComp, /bottom/);
 
 const nativeScaffold = read('src/services/onDeviceAi/nativeScaffold.ts');
 assert.match(nativeScaffold, /return null/);
