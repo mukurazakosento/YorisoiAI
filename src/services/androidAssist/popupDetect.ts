@@ -192,13 +192,24 @@ export function detectPopup(ocrText: string): PopupDetection | null {
   return { kind, fingerprint, topicLabel, buttons, excerpt };
 }
 
+export function requiredPopupStreak(
+  detection: PopupDetection,
+  intervalMs: number,
+): number {
+  if (intervalMs >= 15_000) return 1;
+  const strong =
+    detection.kind !== 'UNKNOWN_DIALOG' && detection.buttons.length > 0;
+  return strong ? 1 : 2;
+}
+
 export function isPopupStable(
   previousFingerprint: string | null | undefined,
   current: PopupDetection,
   streak: number,
+  needed = 2,
 ): boolean {
   if (previousFingerprint !== current.fingerprint) return false;
-  return streak >= 2;
+  return streak >= Math.max(1, needed);
 }
 
 export function redactSecretsForVoice(text: string): string {

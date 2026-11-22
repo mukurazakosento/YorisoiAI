@@ -33,6 +33,7 @@ export {
   explainScreenText,
   isPopupStable,
   redactSecretsForVoice,
+  requiredPopupStreak,
 } from './popupDetect';
 export type { PopupDetection, PopupExplainStep, PopupKind } from './popupDetect';
 

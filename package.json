@@ -50,7 +50,8 @@
     "smoke:android-assist": "node --import tsx scripts/smoke-android-assist.mjs",
     "smoke:android-assist-guidance": "node --import tsx scripts/smoke-android-assist-guidance.mjs",
     "smoke:assist-ux-four": "node --import tsx scripts/smoke-assist-ux-four.mjs",
-    "smoke:popup-auto-assist": "node --import tsx scripts/smoke-popup-auto-assist.mjs"
+    "smoke:popup-auto-assist": "node --import tsx scripts/smoke-popup-auto-assist.mjs",
+    "smoke:ocr-aligned-guidance": "node --import tsx scripts/smoke-ocr-aligned-guidance.mjs"
   },
   "private": true
 }

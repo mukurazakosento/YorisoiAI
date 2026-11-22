@@ -37,7 +37,8 @@ class AssistForegroundService : Service() {
     const val EXTRA_VOICE = "voiceEnabled"
     const val EXTRA_INTERVAL_MS = "intervalMs"
 
-    const val DEFAULT_INTERVAL_MS = 3000L
+    /** Default capture/OCR/guidance cycle (~20s). */
+    const val DEFAULT_INTERVAL_MS = 20000L
 
     @Volatile
     var running: Boolean = false
@@ -159,7 +160,8 @@ class AssistForegroundService : Service() {
         goalSummary = intent.getStringExtra(EXTRA_GOAL).orEmpty()
         featureId = intent.getStringExtra(EXTRA_FEATURE) ?: "operationSupport"
         voiceEnabled = intent.getBooleanExtra(EXTRA_VOICE, true)
-        intervalMs = intent.getLongExtra(EXTRA_INTERVAL_MS, DEFAULT_INTERVAL_MS).coerceIn(2000L, 10000L)
+        // Allow ~10–60s; default 20s. Old 3s default / 10s clamp was a root cause of spam + delayed popup explain.
+        intervalMs = intent.getLongExtra(EXTRA_INTERVAL_MS, DEFAULT_INTERVAL_MS).coerceIn(10000L, 60000L)
         tts?.setEnabled(voiceEnabled)
         startProjectionSession()
         return START_STICKY
@@ -357,8 +359,9 @@ class AssistForegroundService : Service() {
       announcedStageId = guidance.stageId
       lastStepId = guidance.stepId
       lastGuidance = guidance.displayText
-      // Don't spam identical notification body
+      // Notify + TTS immediately once guidance is decided (no extra delay).
       AssistNotifier.showGuidance(this, "よりそいAI", guidance.displayText)
+      updateForeground(guidance.displayText)
       if (voiceEnabled) {
         tts?.speakLatest(guidance.voiceText)
       }
@@ -408,15 +411,18 @@ class AssistForegroundService : Service() {
         pendingPopupFingerprint = detection.fingerprint
         popupStreak = 1
       }
-      val stable = AssistPopupDetector.isStable(pendingPopupFingerprint, detection, popupStreak)
+      // At ~20s interval, requiring 2 frames delayed popups ~40s (textExplanation miss).
+      // Strong dialogs (known kind + buttons) announce on first OCR hit; weak need 2.
+      val needed = AssistPopupDetector.requiredStreak(detection, intervalMs)
+      val stable = AssistPopupDetector.isStable(pendingPopupFingerprint, detection, popupStreak, needed)
       if (!stable) {
-        // Wait for a second matching sample (~3s later) before speaking.
         return null
       }
       if (announcedPopupFingerprint == detection.fingerprint) {
         return null
       }
       announcedPopupFingerprint = detection.fingerprint
+      // Same popup path for operationSupport and textExplanation (notify+TTS upstream).
       return AssistPopupExplainer.explain(detection)
     }
 

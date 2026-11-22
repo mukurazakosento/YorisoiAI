@@ -88,6 +88,10 @@ object AssistNotifier {
     return builder.build()
   }
 
+  /**
+   * Heads-up guidance as soon as a new instruction is ready.
+   * Cancel+repost so OEM grouping / prior silent updates do not swallow the alert.
+   */
   fun showGuidance(context: Context, title: String, body: String) {
     ensureChannel(context)
     val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -109,12 +113,18 @@ object AssistNotifier {
       .setSmallIcon(android.R.drawable.ic_menu_info_details)
       .setContentIntent(pending)
       .setAutoCancel(true)
+      .setOnlyAlertOnce(false)
+      .setPriority(NotificationCompat.PRIORITY_HIGH)
+      .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+      .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
       .addAction(
         0,
         "終了",
         serviceActionPending(context, AssistForegroundService.ACTION_STOP, 13),
       )
       .build()
+    // Force a fresh alert for this guidance id.
+    manager.cancel(GUIDANCE_ID)
     manager.notify(GUIDANCE_ID, notification)
   }
 

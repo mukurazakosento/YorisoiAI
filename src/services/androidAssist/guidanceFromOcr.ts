@@ -6,7 +6,7 @@ type StepCore = Omit<AndroidAssistGuidance, 'at' | 'ocrTextPreview' | 'mode'>;
 
 /**
  * Stage-aware JS guidance (mirrors native AssistGuidanceRules).
- * Always mode demo — never live AI while Llama is disconnected.
+ * Instructions quote current OCR labels. Always mode demo.
  */
 export function buildGuidanceFromOcrText(input: {
   featureId: FeatureId;
@@ -14,7 +14,7 @@ export function buildGuidanceFromOcrText(input: {
   ocrText: string;
 }): AndroidAssistGuidance {
   const goal = normalize(input.goalSummary);
-  const ocrRaw = input.ocrText.trim();
+  const ocrRaw = input.ocrText.trim().replace(/\s+/g, ' ');
   const o = normalize(ocrRaw);
 
   const base = (step: StepCore): AndroidAssistGuidance => ({
@@ -29,12 +29,12 @@ export function buildGuidanceFromOcrText(input: {
   }
 
   if (input.featureId === 'safetyCheck') {
+    const snippet = clipQuote(ocrRaw, 24);
     return base({
       stepId: 'safety-review',
       stageId: 'safety',
-      displayText: '番号や文言をよく見てください。',
-      voiceText:
-        '画面の番号や文言をゆっくり確認してください。安全だと決めつけないでください。',
+      displayText: `画面の「${snippet}」など、番号や文言をよく見てください。`,
+      voiceText: `画面には「${snippet}」などとあります。番号や文言をゆっくり確認してください。安全だと決めつけないでください。`,
     });
   }
 
@@ -48,9 +48,8 @@ export function buildGuidanceFromOcrText(input: {
     });
   }
 
-  // Popup interrupts operation-support when OCR looks like a dialog.
   const popup = detectPopup(ocrRaw);
-  if (popup && input.featureId === 'operationSupport') {
+  if (popup) {
     const explained = explainPopup(popup);
     return base({
       stepId: explained.stepId,
@@ -61,25 +60,19 @@ export function buildGuidanceFromOcrText(input: {
   }
 
   if (looksLikeLinePhotoGoal(goal)) {
-    return base(linePhotoStep(o));
+    return base(linePhotoStep(o, ocrRaw));
   }
   if (looksLikeWifiGoal(goal)) {
-    return base(wifiStep(o));
+    return base(wifiStep(o, ocrRaw));
   }
   if (looksLikePhoneGoal(goal)) {
-    return base(phoneStep(o));
+    return base(phoneStep(o, ocrRaw));
   }
   if (looksLikeSettingsGoal(goal)) {
-    return base(settingsStep(o));
+    return base(settingsStep(o, ocrRaw));
   }
 
-  return base({
-    stepId: 'ask-clarify',
-    stageId: 'clarify',
-    displayText: 'やりたいことを一つ教えてください。',
-    voiceText:
-      'いまの画面で、何をしたいか一つだけ教えてください。LINEの写真送信だとは決めつけません。',
-  });
+  return base(ocrGroundedFallback(ocrRaw, input.goalSummary));
 }
 
 export function unreadableGuidanceStep(): StepCore {
@@ -167,23 +160,121 @@ function looksLikeSettingsGoal(g: string): boolean {
   );
 }
 
-function wifiStep(o: string): StepCore {
-  if (o.includes('接続済み') || o.includes('接続されています')) {
+function clipQuote(text: string, max: number): string {
+  const t = text.replace(/\s+/g, ' ').trim();
+  return t.length <= max ? t : `${t.slice(0, max)}…`;
+}
+
+function firstMatch(raw: string, labels: string[]): string | null {
+  for (const label of labels) {
+    if (raw.includes(label)) return label;
+  }
+  return null;
+}
+
+function firstUiLabel(raw: string): string | null {
+  return firstMatch(raw, [
+    '許可しない',
+    '許可する',
+    '送信',
+    '送る',
+    'アルバム',
+    'ギャラリー',
+    '写真',
+    'カメラ',
+    '設定',
+    'Wi-Fi',
+    'Wi‑Fi',
+    '通知',
+    '友だち',
+    'トーク',
+    'ホーム',
+    'キャンセル',
+    '同意する',
+    '次へ',
+    '閉じる',
+    '選択',
+    '添付',
+  ]);
+}
+
+function withSeen(
+  stepId: string,
+  stageId: string,
+  display: string,
+  voice: string,
+  raw: string,
+  labels: string[],
+): StepCore {
+  const seen = firstMatch(raw, labels);
+  if (!seen) {
+    return { stepId, stageId, displayText: display, voiceText: voice };
+  }
+  return {
+    stepId,
+    stageId,
+    displayText: `画面に「${seen}」とあります。${display}`.slice(0, 120),
+    voiceText: `いまの画面には「${seen}」と見えます。${voice}`,
+  };
+}
+
+function ocrGroundedOr(raw: string, generic: StepCore): StepCore {
+  const label = firstUiLabel(raw);
+  if (!label) return generic;
+  const snippet = clipQuote(raw, 28);
+  return {
+    stepId: `${generic.stepId}-ocr`,
+    stageId: generic.stageId,
+    displayText: `画面の「${label}」を押してください。`,
+    voiceText: `画面には「${snippet}」とあります。次は「${label}」を押してください。${generic.voiceText}`,
+  };
+}
+
+function ocrGroundedFallback(raw: string, goalSummary: string): StepCore {
+  const snippet = clipQuote(raw, 28);
+  const label = firstUiLabel(raw);
+  const goalBit = goalSummary.trim().slice(0, 20);
+  if (label) {
     return {
-      stepId: 'wifi-connected',
-      stageId: 'wifi-connected',
-      displayText: 'つながっているようです。終わってよければ終了してください。',
-      voiceText:
-        'Wi-Fiにつながっているようです。ほかにやることがなければ、終了してください。',
+      stepId: 'ocr-tap-label',
+      stageId: 'ocr-grounded',
+      displayText: `画面の「${label}」を押してください。`,
+      voiceText: `いまの画面には「${snippet}」とあります。次は「${label}」を一つ押してください。よりそいAIは代わりに押しません。`,
     };
   }
-  if (o.includes('パスワード') || o.includes('入力')) {
-    return {
-      stepId: 'wifi-password',
-      stageId: 'wifi-password',
-      displayText: 'パスワードを入力してください。',
-      voiceText: '控えたWi-Fiのパスワードを入力してください。よりそいAIは代わりに入力しません。',
-    };
+  return {
+    stepId: 'ask-clarify',
+    stageId: 'clarify',
+    displayText: `画面に「${snippet}」とあります。やりたいことを一つ教えてください。`,
+    voiceText: `いまの画面には「${snippet}」と見えます。${
+      goalBit ? `「${goalBit}」について、` : ''
+    }次に押す場所を一つだけ教えてください。決めつけません。`,
+  };
+}
+
+function wifiStep(o: string, raw: string): StepCore {
+  if (o.includes('接続済み') || o.includes('接続されています')) {
+    return withSeen(
+      'wifi-connected',
+      'wifi-connected',
+      'つながっているようです。終わってよければ終了してください。',
+      'Wi-Fiにつながっているようです。ほかにやることがなければ、終了してください。',
+      raw,
+      ['接続済み', '接続されています', 'Wi-Fi', 'Wi‑Fi'],
+    );
+  }
+  if (
+    o.includes('パスワード') ||
+    (o.includes('入力') && (o.includes('wifi') || o.includes('wi-fi') || o.includes('ワイファイ')))
+  ) {
+    return withSeen(
+      'wifi-password',
+      'wifi-password',
+      '「パスワード」欄に控えた文字を入力してください。',
+      '画面のパスワード欄に、控えたWi-Fiのパスワードを入力してください。代わりには入力しません。',
+      raw,
+      ['パスワード', '入力'],
+    );
   }
   if (
     o.includes('wi-fi') ||
@@ -191,136 +282,168 @@ function wifiStep(o: string): StepCore {
     o.includes('ワイファイ') ||
     o.includes('ネットワーク')
   ) {
-    return {
-      stepId: 'wifi-pick',
-      stageId: 'wifi-list',
-      displayText: '使いたいWi-Fiの名前を選んでください。',
-      voiceText: '一覧から、使いたいWi-Fiの名前を一つ選んでください。',
-    };
+    return withSeen(
+      'wifi-pick',
+      'wifi-list',
+      '一覧から使いたいWi-Fiの名前を選んでください。',
+      '画面の一覧から、使いたいWi-Fiの名前を一つ選んでください。',
+      raw,
+      ['ネットワーク', 'Wi-Fi', 'Wi‑Fi', 'ワイファイ'],
+    );
   }
   if (o.includes('設定')) {
-    return {
-      stepId: 'wifi-open-from-settings',
-      stageId: 'wifi-settings',
-      displayText: '「Wi-Fi」を開いてください。',
-      voiceText: '設定の中のWi-Fiを押してください。',
-    };
+    return withSeen(
+      'wifi-open-from-settings',
+      'wifi-settings',
+      '設定の中の「Wi-Fi」を押してください。',
+      'いま設定画面です。Wi-Fiの項目を押してください。',
+      raw,
+      ['Wi-Fi', 'Wi‑Fi', '設定'],
+    );
   }
-  return {
+  return ocrGroundedOr(raw, {
     stepId: 'wifi-open',
     stageId: 'wifi-start',
-    displayText: '設定からWi-Fiを開いてください。',
+    displayText: '設定アプリを開き、「Wi-Fi」を選んでください。',
     voiceText: '設定アプリを開き、Wi-Fiを選んでください。',
-  };
+  });
 }
 
-function phoneStep(o: string): StepCore {
-  if (o.includes('通話') || o.includes('発信') || o.includes('着信中')) {
-    return {
-      stepId: 'phone-review',
-      stageId: 'phone-active',
-      displayText: '番号をよく見てから選んでください。',
-      voiceText:
-        '画面の番号をよく見てください。知らない番号なら、急がなくて大丈夫です。',
-    };
+function phoneStep(o: string, raw: string): StepCore {
+  if (o.includes('通話') || o.includes('着信中')) {
+    return withSeen(
+      'phone-review',
+      'phone-active',
+      '画面の番号をよく見てから選んでください。',
+      '画面の番号をよく見てください。知らない番号なら、急がなくて大丈夫です。',
+      raw,
+      ['通話', '着信中', '発信'],
+    );
   }
   if (o.includes('履歴') || o.includes('着信') || o.includes('発信')) {
-    return {
-      stepId: 'phone-log',
-      stageId: 'phone-log',
-      displayText: '確認したい番号を選んでください。',
-      voiceText: '履歴から、確認したい番号を一つ選んでください。',
-    };
+    return withSeen(
+      'phone-log',
+      'phone-log',
+      '履歴から確認したい番号を一つ選んでください。',
+      '履歴の一覧から、確認したい番号を一つ選んでください。',
+      raw,
+      ['履歴', '着信', '発信'],
+    );
   }
-  return {
+  return ocrGroundedOr(raw, {
     stepId: 'phone-open',
     stageId: 'phone-start',
     displayText: '電話アプリを開いてください。',
     voiceText: '電話アプリを開き、確認したい番号が出るところまで進めてください。',
-  };
+  });
 }
 
-function settingsStep(o: string): StepCore {
+function settingsStep(o: string, raw: string): StepCore {
   if (o.includes('通知') && (o.includes('オン') || o.includes('オフ') || o.includes('許可'))) {
-    return {
-      stepId: 'settings-notify-toggle',
-      stageId: 'settings-notify',
-      displayText: '通知のスイッチを合わせてください。',
-      voiceText: '通知のオン・オフを、必要な方へ合わせてください。一度に一つです。',
-    };
+    return withSeen(
+      'settings-notify-toggle',
+      'settings-notify',
+      '通知のオン・オフを、必要な方へ合わせてください。',
+      '画面の通知スイッチを、必要な方へ一つ合わせてください。',
+      raw,
+      ['通知', 'オン', 'オフ', '許可'],
+    );
   }
   if (o.includes('通知')) {
-    return {
-      stepId: 'settings-notify',
-      stageId: 'settings-notify-list',
-      displayText: '「通知」を開いてください。',
-      voiceText: '一覧から通知を開いてください。',
-    };
+    return withSeen(
+      'settings-notify',
+      'settings-notify-list',
+      '一覧の「通知」を開いてください。',
+      '画面の一覧から「通知」を開いてください。',
+      raw,
+      ['通知'],
+    );
   }
-  return {
+  return ocrGroundedOr(raw, {
     stepId: 'settings-open',
     stageId: 'settings-home',
     displayText: '直したい項目を一つ開いてください。',
     voiceText: '設定で、直したい項目を一つだけ開いてください。',
-  };
+  });
 }
 
-function linePhotoStep(o: string): StepCore {
+function linePhotoStep(o: string, raw: string): StepCore {
   if (hasClearSentConfirmation(o)) {
-    return {
-      stepId: 'line-ask-done',
-      stageId: 'line-ask-done',
-      displayText: '送れたか確認してください。',
-      voiceText:
-        '写真が送れたか、相手の名前と一緒に確認してください。分からなければアプリに戻ってください。',
-    };
+    return withSeen(
+      'line-ask-done',
+      'line-ask-done',
+      '送れたか、相手の名前と一緒に確認してください。',
+      '写真が送れたか、相手の名前と一緒に確認してください。分からなければアプリに戻ってください。',
+      raw,
+      ['送信しました', '送信済み', 'トーク', '孫'],
+    );
   }
   if (o.includes('送信') || o.includes('送る')) {
+    const label = firstMatch(raw, ['送信', '送る']) ?? '送信';
     return {
       stepId: 'line-confirm-send',
       stageId: 'line-pre-send',
-      displayText: '確かめてから「送信」を押してください。',
-      voiceText:
-        '写真と相手を確かめてから、送信を押してください。代わりには押しません。',
+      displayText: `写真と相手を確かめてから「${label}」を押してください。`,
+      voiceText: `画面に「${label}」があります。写真と相手を確かめてから、それを押してください。代わりには押しません。`,
     };
   }
   if (o.includes('既読') || o.includes('取り消')) {
-    return {
-      stepId: 'line-confirm-send',
-      stageId: 'line-pre-send',
-      displayText: '送れても自動では終わりません。確かめてください。',
-      voiceText:
-        '送信や既読だけでは送れたとは決めつけません。画面を確かめてください。',
-    };
+    return withSeen(
+      'line-confirm-send',
+      'line-pre-send',
+      '送れても自動では終わりません。画面を確かめてください。',
+      '送信や既読だけでは送れたとは決めつけません。画面を確かめてください。',
+      raw,
+      ['既読', '取り消', '送信'],
+    );
   }
   if (
     o.includes('アルバム') ||
     o.includes('ギャラリー') ||
     o.includes('画像を選択') ||
     o.includes('最近の項目') ||
-    o.includes('すべての写真')
+    o.includes('すべての写真') ||
+    o.includes('写真を選択')
   ) {
+    const label =
+      firstMatch(raw, [
+        '最近の項目',
+        'すべての写真',
+        'アルバム',
+        'ギャラリー',
+        '画像を選択',
+        '写真を選択',
+      ]) ?? '写真';
     return {
       stepId: 'line-pick-photo',
       stageId: 'line-album',
-      displayText: '送りたい写真を一つ選んでください。',
-      voiceText: '送りたい写真を一つだけ選んでください。',
+      displayText: `「${label}」から送りたい写真を一つ選んでください。`,
+      voiceText: `画面に「${label}」とあります。送りたい写真を一つだけ選んでください。`,
     };
   }
-  if (o.includes('カメラ') && (o.includes('アルバム') || o.includes('画像') || o.includes('写真'))) {
+  if (
+    o.includes('カメラ') &&
+    (o.includes('アルバム') || o.includes('画像') || o.includes('写真') || o.includes('ライブラリ'))
+  ) {
+    const label = firstMatch(raw, ['アルバム', '画像', 'ライブラリ', '写真']) ?? 'アルバム';
     return {
       stepId: 'line-choose-album',
       stageId: 'line-album-choice',
-      displayText: '「アルバム」や「画像」を選んでください。',
-      voiceText: 'カメラではなく、アルバムや画像を選んでください。',
+      displayText: `カメラではなく「${label}」を選んでください。`,
+      voiceText: `画面に「${label}」があります。カメラではなく、それを選んでください。`,
     };
   }
-  if (o.includes('添付') || (o.includes('写真') && o.includes('選択'))) {
+  if (
+    o.includes('添付') ||
+    o.includes('プラス') ||
+    (o.includes('写真') && (o.includes('選択') || o.includes('送信')))
+  ) {
+    const label = firstMatch(raw, ['写真', '添付', '＋', '+', 'アルバム']) ?? '写真';
     return {
       stepId: 'line-open-attach',
       stageId: 'line-chat',
-      displayText: '写真ボタン（＋など）を押してください。',
-      voiceText: 'トーク画面の、写真やプラスのボタンを押してください。',
+      displayText: `トーク画面の「${label}」やプラスを押してください。`,
+      voiceText: `トーク画面に「${label}」などと見えます。写真やプラスのボタンを押してください。`,
     };
   }
   if (
@@ -331,37 +454,40 @@ function linePhotoStep(o: string): StepCore {
     return {
       stepId: 'line-in-talk',
       stageId: 'line-chat',
-      displayText: '写真ボタンを探して押してください。',
-      voiceText:
-        '孫とのトーク画面です。下の写真やプラスを探して押してください。',
+      displayText: 'トーク画面です。下の写真やプラスを押してください。',
+      voiceText: 'いまトーク画面の文字が見えます。下の写真やプラスを探して押してください。',
     };
   }
   if (
     o.includes('チャット一覧') ||
     o.includes('友だち') ||
+    o.includes('トーク一覧') ||
     (o.includes('ホーム') && !o.includes('トークルーム'))
   ) {
+    const label = firstMatch(raw, ['友だち', 'チャット一覧', 'トーク一覧', 'ホーム']) ?? '友だち';
     return {
       stepId: 'line-pick-friend',
       stageId: 'line-friends',
-      displayText: '孫の名前のトークを開いてください。',
-      voiceText: '友だち一覧から、孫の名前を選んでください。',
+      displayText: `「${label}」から孫の名前のトークを開いてください。`,
+      voiceText: `画面に「${label}」とあります。孫の名前を選んでトークを開いてください。`,
     };
   }
   if (o.includes('line') || o.includes('ライン')) {
-    return {
-      stepId: 'line-open',
-      stageId: 'line-home',
-      displayText: 'まず LINE を開いてください。',
-      voiceText: '緑のLINEアプリを開いてください。',
-    };
+    return withSeen(
+      'line-open',
+      'line-home',
+      'LINEのホームです。友だちやトーク一覧へ進んでください。',
+      'いまLINEの画面です。友だちやトーク一覧から孫の名前へ進んでください。',
+      raw,
+      ['LINE', 'ライン', 'ホーム'],
+    );
   }
-  return {
+  return ocrGroundedOr(raw, {
     stepId: 'line-start',
     stageId: 'line-start',
     displayText: 'LINEを開き、孫のトークへ進みます。',
     voiceText: 'LINEを開き、孫のトークを選んでください。一度に一つです。',
-  };
+  });
 }
 
 function normalize(text: string): string {

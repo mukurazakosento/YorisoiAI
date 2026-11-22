@@ -195,7 +195,7 @@ export async function startAndroidAssistSession(
       featureId: input.featureId,
       goalSummary: input.goalSummary,
       voiceEnabled: input.voiceEnabled !== false,
-      intervalMs: input.intervalMs ?? 3000,
+      intervalMs: input.intervalMs ?? 20000,
     });
 
     setState({

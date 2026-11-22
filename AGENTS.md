@@ -10,7 +10,7 @@
 - **AI 既定**: 端末内 Llama 系（`src/services/onDeviceAi/`）。Web は WebLLM、ネイティブは llama.cpp / ExecuTorch スキャフォールド
 - 未接続時は明示 **デモ / AI未接続**。`mode: live` はエンジン ready のときだけ
 - **画面フレーム**: `src/services/capture/`（利用者開始のスクショ選択＋端末内 OCR。Broadcast Upload は未リンク）
-- **Android 背面支援**: `modules/yorisoi-android-assist` + `src/services/androidAssist/`（MediaProjection＋FGS・約3秒 OCR・変化時のみ案内）。ポップアップは OCR 構造検知→安定後に解説（自動タップなし）。iOS/Web/Expo Go では不可
+- **Android 背面支援**: `modules/yorisoi-android-assist` + `src/services/androidAssist/`（MediaProjection＋FGS・約20秒 OCR・変化時案内＋即時通知）。案内は OCR ラベル引用。ポップアップは構造検知→解説（自動タップなし）。iOS/Web/Expo Go では不可
 - **ホーム**: 操作支援＋文章説明のみ表示（`HOME_FEATURES`）。`safetyCheck` はコード保持・ホーム非表示
 - OCR: `modules/yorisoi-mlkit-ocr`（ML Kit 日本語・端末内のみ。Android は bundled モデル）。背面支援も同一 ML Kit 系を再利用（OCR Expo モジュールは増やさない）。確認済みテキストだけ案内へ
 - 旧 `functions/` Gemini Callable は `EXPO_PUBLIC_LEGACY_CLOUD_AI=true` の任意経路（必須にしない）
@@ -51,6 +51,7 @@ npm run smoke:android-assist
 npm run smoke:android-assist-guidance
 npm run smoke:assist-ux-four
 npm run smoke:popup-auto-assist
+npm run smoke:ocr-aligned-guidance
 npm run smoke:on-device
 npm run smoke:session
 npm run smoke:speech
