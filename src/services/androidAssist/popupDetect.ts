@@ -47,7 +47,8 @@ function looksLikeDialog(n: string): boolean {
     n.includes('許可') ||
     n.includes('アクセス') ||
     n.includes('使ってよろしい') ||
-    n.includes('使用を許可');
+    n.includes('使用を許可') ||
+    n.includes('使用することを許可');
   const termsCue =
     n.includes('利用規約') ||
     n.includes('プライバシー') ||
@@ -57,7 +58,8 @@ function looksLikeDialog(n: string): boolean {
     n.includes('アップデート') ||
     n.includes('更新があります') ||
     n.includes('新しいバージョン') ||
-    n.includes('インストール');
+    n.includes('インストール') ||
+    (n.includes('更新') && (n.includes('後で') || n.includes('今はしない')));
   const questionCue =
     n.includes('しますか') ||
     n.includes('よろしいですか') ||
@@ -69,14 +71,41 @@ function looksLikeDialog(n: string): boolean {
     n.includes('拒否') ||
     n.includes('キャンセル') ||
     n.includes('一度だけ') ||
+    n.includes('今回のみ') ||
     n.includes('アプリの使用中') ||
     n.includes('許可する') ||
-    n.includes('同意');
+    n.includes('同意') ||
+    n.includes('後で') ||
+    n.includes('今はしない');
+  const softPermissionBody =
+    (n.includes('アクセス') || n.includes('許可')) &&
+    (n.includes('カメラ') ||
+      n.includes('マイク') ||
+      n.includes('写真') ||
+      n.includes('画像') ||
+      n.includes('動画') ||
+      n.includes('音楽') ||
+      n.includes('メディア') ||
+      n.includes('位置') ||
+      n.includes('通知') ||
+      n.includes('連絡先') ||
+      n.includes('ファイル') ||
+      n.includes('ストレージ') ||
+      n.includes('bluetooth'));
+  const permissionButtonCluster =
+    n.includes('許可しない') &&
+    (n.includes('一度だけ') ||
+      n.includes('今回のみ') ||
+      n.includes('アプリの使用中') ||
+      n.includes('許可する') ||
+      n.includes('許可'));
   return (
     (permissionCue && (questionCue || buttonCue)) ||
-    (termsCue && buttonCue) ||
+    (termsCue && (buttonCue || questionCue)) ||
     (updateCue && (questionCue || buttonCue)) ||
-    (permissionCue && buttonCue)
+    (permissionCue && buttonCue) ||
+    softPermissionBody ||
+    permissionButtonCluster
   );
 }
 
@@ -195,7 +224,9 @@ export function detectPopup(ocrText: string): PopupDetection | null {
 export function requiredPopupStreak(
   detection: PopupDetection,
   intervalMs: number,
+  featureId: string = 'operationSupport',
 ): number {
+  if (featureId === 'textExplanation') return 1;
   if (intervalMs >= 15_000) return 1;
   const strong =
     detection.kind !== 'UNKNOWN_DIALOG' && detection.buttons.length > 0;

@@ -41,6 +41,8 @@ const detector = read(
 assert.match(detector, /PERMISSION_CAMERA/);
 assert.match(detector, /fingerprint/);
 assert.match(detector, /isStable/);
+assert.match(detector, /textExplanation/);
+assert.match(detector, /softPermissionBody|permissionButtonCluster|今回のみ/);
 assert.doesNotMatch(detector, /import .*AccessibilityService|dispatchGesture|performGlobalAction/);
 
 const explainer = read(
@@ -94,6 +96,10 @@ const {
   isPopupStable,
   redactSecretsForVoice,
   containsSensitive,
+  resolveAssistGuidance,
+  assistIntervalForFeature,
+  TEXT_EXPLAIN_ASSIST_INTERVAL_MS,
+  OPS_ASSIST_INTERVAL_MS,
 } = await import(assistUrl);
 
 const featuresUrl = pathToFileURL(
@@ -186,5 +192,35 @@ const safety = buildGuidanceFromOcrText({
 });
 assert.equal(safety.stageId, 'safety');
 assert.match(safety.voiceText, /決めつけない/);
+
+// --- Broader Japanese dialog cues ---
+assert.ok(detectPopup('新しいバージョンが利用可能です 更新 後で'));
+assert.ok(detectPopup('デバイスの写真や動画、音楽へのアクセスを許可'));
+assert.ok(detectPopup('許可しない アプリの使用中のみ 今回のみ'));
+
+// --- textExplanation FGS path: popup → explanation on first sample ---
+assert.equal(assistIntervalForFeature('textExplanation'), TEXT_EXPLAIN_ASSIST_INTERVAL_MS);
+assert.equal(assistIntervalForFeature('operationSupport'), OPS_ASSIST_INTERVAL_MS);
+const popupFire = resolveAssistGuidance({
+  featureId: 'textExplanation',
+  goalSummary: 'この確認を説明して',
+  ocrText: camOcr,
+  ocrChanged: true,
+  intervalMs: TEXT_EXPLAIN_ASSIST_INTERVAL_MS,
+});
+assert.ok(popupFire.step);
+assert.match(popupFire.step.stageId, /popup/i);
+assert.match(popupFire.step.voiceText, /代わりに押しません/);
+
+// Normal non-dialog still gets OCR summary for textExplanation
+const plain = resolveAssistGuidance({
+  featureId: 'textExplanation',
+  goalSummary: '説明して',
+  ocrText: '設定 Wi‑Fi 接続済み',
+  ocrChanged: true,
+  intervalMs: TEXT_EXPLAIN_ASSIST_INTERVAL_MS,
+});
+assert.ok(plain.step);
+assert.match(plain.step.displayText, /設定|Wi/);
 
 console.log('smoke-popup-auto-assist: OK');

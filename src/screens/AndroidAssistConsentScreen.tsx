@@ -62,7 +62,7 @@ export function AndroidAssistConsentScreen({ navigation, route }: Props) {
           style={[styles.line, { fontSize: fontSize(baseFontSizes.body) }]}
           numberOfLines={3}
         >
-          次の画面で「画面の共有」を許可すると、よりそいAIを背面にしても約3秒ごとに文字を読み、変わったときだけ案内します。
+          次の画面で「画面の共有」を許可すると、よりそいAIを背面にしても画面の文字を読み、変わったときだけ案内します（操作支援は約20秒ごと、文章説明のポップアップはより短い間隔）。
         </Text>
         <Text
           style={[styles.line, { fontSize: fontSize(baseFontSizes.body) }]}

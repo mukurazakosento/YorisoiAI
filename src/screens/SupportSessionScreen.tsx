@@ -11,6 +11,7 @@ import { getFeatureById } from '../constants/features';
 import { baseFontSizes } from '../constants/typography';
 import { useSettings } from '../hooks/useSettings';
 import {
+  assistIntervalForFeature,
   getAndroidAssistSessionState,
   pauseAndroidAssistSession,
   resumeAndroidAssistSession,
@@ -166,7 +167,8 @@ export function SupportSessionScreen({ navigation, route }: Props) {
           featureId,
           goalSummary: summary,
           voiceEnabled: settings.voiceEnabled,
-          intervalMs: 20000,
+          // Ops ~20s; 文章説明 ~4s so transient popups are not missed.
+          intervalMs: assistIntervalForFeature(featureId),
         });
       }
 

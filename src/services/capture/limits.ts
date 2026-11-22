@@ -9,7 +9,7 @@ export const CAPTURE_OS_LIMITS: CaptureOsLimits = {
     '利用者が自分で始めた画面収録（コントロールセンター等）や、自分で撮ったスクリーンショットを選ぶこと',
     '選んだ画像を端末内 OCR（Google ML Kit 日本語）で読み、確認した文字だけを案内に使うこと',
     '支援セッション中に「画面を読み取る」で都度フレームを取り込むこと（自動スパイではない）',
-    'Android: 利用者が画面共有を許可した MediaProjection＋Foreground Service で背面支援（約3秒間隔・変化時のみ案内）',
+    'Android: 利用者が画面共有を許可した MediaProjection＋Foreground Service で背面支援（操作支援約20秒／文章説明は短い間隔・変化時のみ案内）',
     '将来、ユーザー開始の Broadcast Upload Extension から定期フレームを受け取る設計（いまは未リンク）',
   ],
   cannot: [

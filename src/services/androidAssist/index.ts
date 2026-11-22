@@ -27,6 +27,15 @@ export {
 } from './guidanceFromOcr';
 
 export {
+  ASSIST_INTERVAL_MAX_MS,
+  ASSIST_INTERVAL_MIN_MS,
+  OPS_ASSIST_INTERVAL_MS,
+  TEXT_EXPLAIN_ASSIST_INTERVAL_MS,
+  assistIntervalForFeature,
+  clampAssistIntervalMs,
+} from './intervals';
+
+export {
   containsSensitive,
   detectPopup,
   explainPopup,
@@ -37,6 +46,9 @@ export {
   requiredPopupStreak,
 } from './popupDetect';
 export type { PopupDetection, PopupExplainStep, PopupKind } from './popupDetect';
+
+export { resolveAssistGuidance } from './resolveGuidance';
+export type { ResolveGuidanceInput, ResolveGuidanceResult } from './resolveGuidance';
 
 export {
   applyOcrTextForTests,

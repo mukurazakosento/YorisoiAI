@@ -17,17 +17,18 @@ function read(rel) {
 const pkg = JSON.parse(read('package.json'));
 assert.match(pkg.scripts['smoke:ocr-aligned-guidance'], /smoke-ocr-aligned-guidance/);
 
-// --- Interval ~20s (root cause: was 3s + clamp max 10s) ---
+// --- Interval: ops ~20s default; textExplanation may use ~4s (min clamp 3s) ---
 const service = read(
   'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistForegroundService.kt',
 );
 assert.match(service, /DEFAULT_INTERVAL_MS = 20000/);
-assert.match(service, /coerceIn\(10000L,\s*60000L\)/);
+assert.match(service, /coerceIn\(3000L,\s*60000L\)/);
 assert.match(service, /requiredStreak|AssistPopupDetector\.requiredStreak/);
 assert.match(service, /updateForeground\(safeDisplay\)/);
 assert.match(service, /AssistNotifier\.showGuidance/);
 assert.match(service, /AssistSecretRedactor\.forPublicText/);
 assert.match(service, /speakLatest\(safeVoice\)/);
+assert.match(service, /featureId == "textExplanation"/);
 
 const moduleKt = read(
   'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/YorisoiAndroidAssistModule.kt',
@@ -35,10 +36,10 @@ const moduleKt = read(
 assert.match(moduleKt, /20000L/);
 
 const session = read('src/services/androidAssist/session.ts');
-assert.match(session, /intervalMs \?\? 20000/);
+assert.match(session, /assistIntervalForFeature|clampAssistIntervalMs/);
 
 const support = read('src/screens/SupportSessionScreen.tsx');
-assert.match(support, /intervalMs:\s*20000/);
+assert.match(support, /assistIntervalForFeature\(featureId\)/);
 
 // --- ASAP notify ---
 const notifier = read(
@@ -72,7 +73,19 @@ const {
   detectPopup,
   isPopupStable,
   requiredPopupStreak,
+  assistIntervalForFeature,
+  OPS_ASSIST_INTERVAL_MS,
+  TEXT_EXPLAIN_ASSIST_INTERVAL_MS,
+  resolveAssistGuidance,
+  containsSensitive,
+  redactSecretsForVoice,
 } = await import(assistUrl);
+
+assert.equal(assistIntervalForFeature('operationSupport'), OPS_ASSIST_INTERVAL_MS);
+assert.equal(OPS_ASSIST_INTERVAL_MS, 20_000);
+assert.equal(assistIntervalForFeature('textExplanation'), TEXT_EXPLAIN_ASSIST_INTERVAL_MS);
+assert.ok(TEXT_EXPLAIN_ASSIST_INTERVAL_MS < 10_000);
+assert.ok(TEXT_EXPLAIN_ASSIST_INTERVAL_MS >= 3_000);
 
 // --- Ops guidance quotes OCR (not generic ignore) ---
 const album = buildGuidanceFromOcrText({
@@ -116,6 +129,54 @@ assert.match(textPopup.voiceText, /代わりに押しません/);
 const det = detectPopup(camOcr);
 assert.ok(det);
 assert.equal(requiredPopupStreak(det, 20000), 1);
+assert.equal(requiredPopupStreak(det, 4000, 'textExplanation'), 1);
 assert.equal(isPopupStable(det.fingerprint, det, 1, 1), true);
+
+// --- FGS-mirrored resolve: textExplanation popup fires on first sample ---
+const resolved = resolveAssistGuidance({
+  featureId: 'textExplanation',
+  goalSummary: 'ポップアップを説明して',
+  ocrText: camOcr,
+  ocrChanged: true,
+  intervalMs: TEXT_EXPLAIN_ASSIST_INTERVAL_MS,
+});
+assert.ok(resolved.step);
+assert.match(resolved.step.stageId, /popup/i);
+assert.match(resolved.step.displayText, /カメラ/);
+assert.match(resolved.step.voiceText, /代わりに押しません/);
+
+// Soft body (no しますか) still detected for textExplanation
+const soft = 'デバイスの写真や動画、音楽へのアクセスを許可';
+assert.ok(detectPopup(soft));
+const softResolved = resolveAssistGuidance({
+  featureId: 'textExplanation',
+  goalSummary: '説明して',
+  ocrText: soft,
+  ocrChanged: true,
+  intervalMs: TEXT_EXPLAIN_ASSIST_INTERVAL_MS,
+});
+assert.ok(softResolved.step);
+assert.match(softResolved.step.stageId, /popup|explain/i);
+
+// Secrets still redacted on popup voice path
+const secretOcr =
+  'カメラへのアクセスを許可しますか？ パスワード: secret99 許可しない 許可する';
+assert.equal(containsSensitive(secretOcr), true);
+const secretGuid = buildGuidanceFromOcrText({
+  featureId: 'textExplanation',
+  goalSummary: '説明',
+  ocrText: secretOcr,
+});
+assert.doesNotMatch(redactSecretsForVoice(secretGuid.voiceText), /secret99/);
+
+// Ops interval unchanged at 20s path
+const opsTick = resolveAssistGuidance({
+  featureId: 'operationSupport',
+  goalSummary: 'LINEで孫に写真を送りたい',
+  ocrText: 'アルバム 最近の項目',
+  ocrChanged: true,
+  intervalMs: OPS_ASSIST_INTERVAL_MS,
+});
+assert.equal(opsTick.step?.stepId, 'line-pick-photo');
 
 console.log('smoke-ocr-aligned-guidance: OK');
