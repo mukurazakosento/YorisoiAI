@@ -46,7 +46,7 @@ const service = read(
 assert.match(service, /MediaProjection/);
 assert.match(service, /VirtualDisplay/);
 assert.match(service, /FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION|mediaProjection/);
-assert.match(service, /DEFAULT_INTERVAL_MS = 3000/);
+assert.match(service, /DEFAULT_INTERVAL_MS = 20000/);
 assert.match(service, /AssistOcrHelper/);
 assert.match(service, /AssistProjectionHolder\.clearAll/);
 assert.doesNotMatch(service, /BOOT_COMPLETED|RECEIVE_BOOT/);

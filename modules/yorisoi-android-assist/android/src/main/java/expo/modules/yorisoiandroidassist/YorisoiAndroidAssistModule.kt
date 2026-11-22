@@ -169,7 +169,7 @@ class YorisoiAndroidAssistModule : Module() {
       val goal = (options["goalSummary"] as? String).orEmpty()
       val featureId = (options["featureId"] as? String) ?: "operationSupport"
       val voiceEnabled = options["voiceEnabled"] as? Boolean ?: true
-      val intervalMs = (options["intervalMs"] as? Number)?.toLong() ?: 3000L
+      val intervalMs = (options["intervalMs"] as? Number)?.toLong() ?: 20000L
 
       val intent = Intent(context, AssistForegroundService::class.java).apply {
         action = AssistForegroundService.ACTION_START

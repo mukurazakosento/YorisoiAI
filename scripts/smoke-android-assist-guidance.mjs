@@ -125,7 +125,11 @@ const unclear = buildGuidanceFromOcrText({
   goalSummary: 'うまくいかない',
   ocrText: 'ホーム',
 });
-assert.equal(unclear.stepId, 'ask-clarify');
+// OCR-grounded: cite visible label instead of inventing LINE photo steps.
+assert.ok(
+  unclear.stepId === 'ask-clarify' || unclear.stepId === 'ocr-tap-label',
+);
+assert.match(unclear.displayText, /ホーム/);
 assert.doesNotMatch(unclear.displayText, /LINEで孫/);
 
 // --- unconfirmed send ≠ complete ---

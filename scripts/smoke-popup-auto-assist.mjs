@@ -116,8 +116,9 @@ assert.ok(cam);
 assert.equal(cam.kind, 'PERMISSION_CAMERA');
 assert.ok(cam.buttons.includes('許可しない') || cam.buttons.includes('許可'));
 assert.equal(isPopupStable(null, cam, 1), false);
-assert.equal(isPopupStable(cam.fingerprint, cam, 1), false);
+assert.equal(isPopupStable(cam.fingerprint, cam, 1), false); // default needed=2
 assert.equal(isPopupStable(cam.fingerprint, cam, 2), true);
+assert.equal(isPopupStable(cam.fingerprint, cam, 1, 1), true); // ~20s interval path
 
 const camExplain = explainPopup(cam);
 assert.equal(camExplain.mode, 'demo');

@@ -37,11 +37,12 @@ object AssistPopupExplainer {
       }
 
     val voice = AssistSecretRedactor.forVoice(voiceRaw)
+    val safeDisplay = AssistSecretRedactor.forPublicText(display)
     val stepId = "popup-${detection.fingerprint.hashCode().toUInt()}"
     return AssistGuidanceRules.Step(
       stepId = stepId,
       stageId = "popup-${detection.kind.name.lowercase()}",
-      displayText = display,
+      displayText = safeDisplay,
       voiceText = voice,
       mode = "demo",
     )
@@ -69,11 +70,12 @@ object AssistPopupExplainer {
     if (detection != null) {
       return explain(detection)
     }
+    val safeClip = AssistSecretRedactor.forPublicText(clipped)
     return AssistGuidanceRules.Step(
       stepId = "explain-ocr-${clipped.hashCode().toUInt()}",
       stageId = "explain-screen",
-      displayText = "画面には「${clipped.take(40)}」とあります。",
-      voiceText = "いまの画面の文字は、だいたい次のとおりです。「${AssistSecretRedactor.forVoice(clipped)}」。分からなければアプリに戻って聞いてください。代わりには操作しません。",
+      displayText = "画面には「${safeClip.take(40)}」とあります。",
+      voiceText = "いまの画面の文字は、だいたい次のとおりです。「$safeClip」。分からなければアプリに戻って聞いてください。代わりには操作しません。",
       mode = "demo",
     )
   }

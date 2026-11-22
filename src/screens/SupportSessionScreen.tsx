@@ -166,7 +166,7 @@ export function SupportSessionScreen({ navigation, route }: Props) {
           featureId,
           goalSummary: summary,
           voiceEnabled: settings.voiceEnabled,
-          intervalMs: 3000,
+          intervalMs: 20000,
         });
       }
 

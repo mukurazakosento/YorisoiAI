@@ -54,12 +54,31 @@ object AssistPopupDetector {
     )
   }
 
-  /** Require the same fingerprint across consecutive OCR samples before announce. */
-  fun isStable(previousFingerprint: String?, current: Detection, streak: Int): Boolean {
+  /**
+   * How many consecutive matching samples before announce.
+   * Long capture intervals (≥15s) → 1 (second sample would wait another full cycle).
+   * Strong dialogs (known kind + buttons) → 1 even on shorter intervals.
+   */
+  fun requiredStreak(detection: Detection, intervalMs: Long): Int {
+    if (intervalMs >= 15_000L) {
+      return 1
+    }
+    val strong =
+      detection.kind != PopupKind.UNKNOWN_DIALOG && detection.buttons.isNotEmpty()
+    return if (strong) 1 else 2
+  }
+
+  /** Require the same fingerprint for [needed] consecutive OCR samples before announce. */
+  fun isStable(
+    previousFingerprint: String?,
+    current: Detection,
+    streak: Int,
+    needed: Int = 2,
+  ): Boolean {
     if (previousFingerprint != current.fingerprint) {
       return false
     }
-    return streak >= 2
+    return streak >= needed.coerceAtLeast(1)
   }
 
   private fun looksLikeDialog(n: String): Boolean {
