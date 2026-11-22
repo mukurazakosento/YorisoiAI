@@ -39,11 +39,31 @@ const detector = read(
   'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistPopupDetector.kt',
 );
 assert.match(detector, /PERMISSION_CAMERA/);
+assert.match(detector, /PERMISSION_LOCATION/);
 assert.match(detector, /fingerprint/);
 assert.match(detector, /isStable/);
 assert.match(detector, /textExplanation/);
+assert.match(detector, /locationPrecisionSheet|locationTopicSheet|正確な位置/);
 assert.match(detector, /softPermissionBody|permissionButtonCluster|今回のみ/);
-assert.doesNotMatch(detector, /import .*AccessibilityService|dispatchGesture|performGlobalAction/);
+// No auto-tap; AccessibilityService is optional text-only (session-scoped).
+assert.doesNotMatch(detector, /dispatchGesture|performGlobalAction/);
+
+const a11yService = read(
+  'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistDialogAccessibilityService.kt',
+);
+assert.match(a11yService, /AssistDialogTextHolder/);
+assert.doesNotMatch(a11yService, /dispatchGesture|performGlobalAction|ACTION_CLICK/);
+
+const moduleKt = read(
+  'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/YorisoiAndroidAssistModule.kt',
+);
+assert.match(moduleKt, /createConfigForDefaultDisplay|MediaProjectionConfig/);
+assert.match(moduleKt, /isDialogAccessibilityEnabled/);
+
+const fgs = read(
+  'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistForegroundService.kt',
+);
+assert.match(fgs, /pickBestDialogText|AssistDialogTextHolder/);
 
 const explainer = read(
   'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistPopupExplainer.kt',
@@ -66,7 +86,9 @@ assert.match(service, /AssistPopupExplainer/);
 assert.match(service, /pendingPopupFingerprint|popupStreak/);
 assert.match(service, /resolveGuidance/);
 assert.match(service, /speakLatest/);
-assert.doesNotMatch(service, /AccessibilityService|dispatchGesture|performGlobalAction/);
+assert.match(service, /AssistDialogTextHolder/);
+// Optional a11y text OK; never auto-tap.
+assert.doesNotMatch(service, /dispatchGesture|performGlobalAction|ACTION_CLICK/);
 
 const rules = read(
   'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistGuidanceRules.kt',
@@ -97,6 +119,7 @@ const {
   redactSecretsForVoice,
   containsSensitive,
   resolveAssistGuidance,
+  pickBestDialogText,
   assistIntervalForFeature,
   TEXT_EXPLAIN_ASSIST_INTERVAL_MS,
   OPS_ASSIST_INTERVAL_MS,
@@ -198,9 +221,50 @@ assert.ok(detectPopup('新しいバージョンが利用可能です 更新 後�
 assert.ok(detectPopup('デバイスの写真や動画、音楽へのアクセスを許可'));
 assert.ok(detectPopup('許可しない アプリの使用中のみ 今回のみ'));
 
+// --- Location permission fixtures (AOSP / OEM system sheets) ---
+const locationFull =
+  'マップにこのデバイスの位置情報へのアクセスを許可しますか？ 正確な位置情報 おおよその位置情報 アプリの使用中のみ 今回のみ 許可しない';
+const loc = detectPopup(locationFull);
+assert.ok(loc);
+assert.equal(loc.kind, 'PERMISSION_LOCATION');
+const locGuid = resolveAssistGuidance({
+  featureId: 'textExplanation',
+  goalSummary: '位置情報の許可を説明して',
+  ocrText: locationFull,
+  ocrChanged: true,
+  intervalMs: TEXT_EXPLAIN_ASSIST_INTERVAL_MS,
+});
+assert.ok(locGuid.step);
+assert.match(locGuid.step.stageId, /popup-permission_location/i);
+assert.match(locGuid.step.displayText, /位置/);
+assert.match(locGuid.step.voiceText, /代わりに押しません/);
+
+// Precise/approximate sheet without 「許可しますか」 in OCR
+const locPrecision = detectPopup('位置情報 正確な位置情報 おおよその位置情報');
+assert.ok(locPrecision);
+assert.equal(locPrecision.kind, 'PERMISSION_LOCATION');
+
+// Accessibility fill-in when OCR is blank (system UI excluded / blanked)
+const a11yFill = resolveAssistGuidance({
+  featureId: 'textExplanation',
+  goalSummary: '位置情報の許可を説明して',
+  ocrText: '',
+  a11yText: locationFull,
+  ocrChanged: true,
+  intervalMs: TEXT_EXPLAIN_ASSIST_INTERVAL_MS,
+});
+assert.ok(a11yFill.step);
+assert.match(a11yFill.step.stageId, /popup-permission_location/i);
+assert.equal(pickBestDialogText('トーク アルバム 送信', locationFull), locationFull);
+
+// Non-popup screens should not false-positive as location permission
+assert.equal(detectPopup('トーク アルバム 送信'), null);
+assert.equal(detectPopup('設定 Wi-Fi 接続済み'), null);
+
 // --- textExplanation FGS path: popup → explanation on first sample ---
 assert.equal(assistIntervalForFeature('textExplanation'), TEXT_EXPLAIN_ASSIST_INTERVAL_MS);
 assert.equal(assistIntervalForFeature('operationSupport'), OPS_ASSIST_INTERVAL_MS);
+assert.equal(OPS_ASSIST_INTERVAL_MS, 20_000);
 const popupFire = resolveAssistGuidance({
   featureId: 'textExplanation',
   goalSummary: 'この確認を説明して',

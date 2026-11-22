@@ -58,6 +58,9 @@ export type AndroidAssistErrorEvent = {
 export type YorisoiAndroidAssistNativeModule = {
   isSupported(): boolean;
   getStatus(): AndroidAssistNativeStatus;
+  /** Optional AccessibilityService enabled for system permission dialog text. */
+  isDialogAccessibilityEnabled?: () => boolean;
+  openDialogAccessibilitySettings?: () => Promise<{ ok: boolean }>;
   requestPermission(): Promise<AndroidAssistPermissionResult>;
   startAssist(options: AndroidAssistStartOptions): Promise<{ ok: boolean; alreadyRunning?: boolean }>;
   pauseAssist(): Promise<{ ok: boolean }>;

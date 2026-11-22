@@ -13,6 +13,8 @@ export type ResolveGuidanceInput = {
   featureId: FeatureId;
   goalSummary: string;
   ocrText: string;
+  /** Optional AccessibilityService dialog text (merged like native FGS). */
+  a11yText?: string;
   ocrChanged: boolean;
   intervalMs?: number;
   /** Previous pending fingerprint (mutated across calls by caller). */
@@ -22,6 +24,19 @@ export type ResolveGuidanceInput = {
   announcedStepId?: string;
   announcedStageId?: string;
 };
+
+/** Mirror of AssistForegroundService.pickBestDialogText */
+export function pickBestDialogText(ocrText: string, a11yText: string): string {
+  const ocr = ocrText.replace(/\s+/g, ' ').trim();
+  const a11y = a11yText.replace(/\s+/g, ' ').trim();
+  if (!a11y) return ocr;
+  if (!ocr) return a11y;
+  const ocrDialog = detectPopup(ocr) != null;
+  const a11yDialog = detectPopup(a11y) != null;
+  if (a11yDialog && !ocrDialog) return a11y;
+  if (a11yDialog && ocrDialog && a11y.length >= ocr.length) return a11y;
+  return ocr;
+}
 
 export type ResolveGuidanceResult = {
   step: {
@@ -45,7 +60,7 @@ export function resolveAssistGuidance(input: ResolveGuidanceInput): ResolveGuida
   let pending = input.pendingPopupFingerprint ?? null;
   let streak = input.popupStreak ?? 0;
   let announcedPopup = input.announcedPopupFingerprint ?? null;
-  const normalized = input.ocrText.replace(/\s+/g, ' ').trim();
+  const normalized = pickBestDialogText(input.ocrText, input.a11yText ?? '');
 
   if (!normalized) {
     const unread = unreadableGuidanceStep();

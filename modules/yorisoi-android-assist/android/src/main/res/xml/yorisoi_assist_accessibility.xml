@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Session-scoped dialog text only (no auto-tap).
+  Used when MediaProjection OCR cannot see system permission sheets
+  (Android 14+ app-share excludes system UI; some OEMs blank protected overlays).
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+  android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged"
+  android:accessibilityFeedbackType="feedbackGeneric"
+  android:accessibilityFlags="flagRetrieveInteractiveWindows|flagReportViewIds"
+  android:canRetrieveWindowContent="true"
+  android:description="@string/yorisoi_assist_accessibility_description"
+  android:notificationTimeout="200"
+  android:settingsActivity="" />

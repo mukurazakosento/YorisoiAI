@@ -9,6 +9,10 @@ import { getFeatureById } from '../constants/features';
 import { baseFontSizes } from '../constants/typography';
 import { useSettings } from '../hooks/useSettings';
 import { getAndroidAssistAvailability } from '../services/androidAssist';
+import {
+  isAndroidDialogAccessibilityEnabled,
+  openAndroidDialogAccessibilitySettings,
+} from '../services/androidAssist/dialogAccessibility';
 import { isOnDeviceAiReady } from '../services/onDeviceAi';
 import type { RootStackParamList } from '../types/navigation';
 
@@ -24,6 +28,8 @@ export function AndroidAssistConsentScreen({ navigation, route }: Props) {
   const { fontSize } = useSettings();
   const assist = getAndroidAssistAvailability();
   const aiDemo = !isOnDeviceAiReady();
+  const wantsTextExplain = featureId === 'textExplanation';
+  const a11yOn = wantsTextExplain ? isAndroidDialogAccessibilityEnabled() : false;
 
   const goWithAssist = () => {
     navigation.replace('SupportSession', {
@@ -62,7 +68,7 @@ export function AndroidAssistConsentScreen({ navigation, route }: Props) {
           style={[styles.line, { fontSize: fontSize(baseFontSizes.body) }]}
           numberOfLines={3}
         >
-          次の画面で「画面の共有」を許可すると、よりそいAIを背面にしても画面の文字を読み、変わったときだけ案内します（操作支援は約20秒ごと、文章説明のポップアップはより短い間隔）。
+          次の画面で「画面全体」の共有を許可すると、よりそいAIを背面にしても画面の文字を読み、変わったときだけ案内します。
         </Text>
         <Text
           style={[styles.line, { fontSize: fontSize(baseFontSizes.body) }]}
@@ -70,6 +76,16 @@ export function AndroidAssistConsentScreen({ navigation, route }: Props) {
         >
           画像は端末の中だけ・保存しません。代わりにタップや送信はしません。
         </Text>
+        {wantsTextExplain ? (
+          <Text
+            style={[styles.line, { fontSize: fontSize(baseFontSizes.caption) }]}
+            numberOfLines={3}
+          >
+            {a11yOn
+              ? '位置情報などのシステム許可ダイアログも読み取りできます（支援中のみ・自動タップなし）。'
+              : '位置情報などのシステム許可が読めないときは、設定で「よりそいAI」の読み取りをオンにできます（任意・支援中のみ）。'}
+          </Text>
+        ) : null}
         <Text
           style={[styles.line, { fontSize: fontSize(baseFontSizes.caption) }]}
           numberOfLines={2}
@@ -88,6 +104,17 @@ export function AndroidAssistConsentScreen({ navigation, route }: Props) {
 
       <View style={styles.actions}>
         <PrimaryButton label="画面共有して続ける" onPress={goWithAssist} />
+        {wantsTextExplain && !a11yOn ? (
+          <PrimaryButton
+            label="許可ダイアログ読み取りを設定"
+            variant="secondary"
+            onPress={() => {
+              void openAndroidDialogAccessibilitySettings().catch(() => {
+                // Settings may be unavailable; continue with screen share only.
+              });
+            }}
+          />
+        ) : null}
         <PrimaryButton
           label="手動の読み取りだけにする"
           variant="secondary"

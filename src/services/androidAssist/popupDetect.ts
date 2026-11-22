@@ -48,7 +48,9 @@ function looksLikeDialog(n: string): boolean {
     n.includes('アクセス') ||
     n.includes('使ってよろしい') ||
     n.includes('使用を許可') ||
-    n.includes('使用することを許可');
+    n.includes('使用することを許可') ||
+    n.includes('allow') ||
+    n.includes('access');
   const termsCue =
     n.includes('利用規約') ||
     n.includes('プライバシー') ||
@@ -74,11 +76,20 @@ function looksLikeDialog(n: string): boolean {
     n.includes('今回のみ') ||
     n.includes('アプリの使用中') ||
     n.includes('許可する') ||
+    n.includes('常に許可') ||
     n.includes('同意') ||
     n.includes('後で') ||
-    n.includes('今はしない');
+    n.includes('今はしない') ||
+    n.includes("don'tallow") ||
+    n.includes('dontallow') ||
+    n.includes('whileusingtheapp') ||
+    n.includes('onlythistime') ||
+    n.includes('allowonlywhile');
   const softPermissionBody =
-    (n.includes('アクセス') || n.includes('許可')) &&
+    (n.includes('アクセス') ||
+      n.includes('許可') ||
+      n.includes('access') ||
+      n.includes('allow')) &&
     (n.includes('カメラ') ||
       n.includes('マイク') ||
       n.includes('写真') ||
@@ -87,43 +98,76 @@ function looksLikeDialog(n: string): boolean {
       n.includes('音楽') ||
       n.includes('メディア') ||
       n.includes('位置') ||
+      n.includes('location') ||
       n.includes('通知') ||
+      n.includes('notification') ||
       n.includes('連絡先') ||
       n.includes('ファイル') ||
       n.includes('ストレージ') ||
-      n.includes('bluetooth'));
+      n.includes('bluetooth') ||
+      n.includes('camera') ||
+      n.includes('microphone'));
   const permissionButtonCluster =
-    n.includes('許可しない') &&
+    (n.includes('許可しない') || n.includes("don'tallow") || n.includes('dontallow')) &&
     (n.includes('一度だけ') ||
       n.includes('今回のみ') ||
       n.includes('アプリの使用中') ||
       n.includes('許可する') ||
-      n.includes('許可'));
+      n.includes('常に許可') ||
+      n.includes('許可') ||
+      n.includes('whileusing') ||
+      n.includes('onlythistime'));
+  // Android 12+ location sheet (precise / approximate) even if 「許可」 OCR-missed.
+  const locationPrecisionSheet =
+    (n.includes('正確な位置') || n.includes('precise')) &&
+    (n.includes('おおよそ') || n.includes('approximate'));
+  const locationTopicSheet =
+    n.includes('位置情報') &&
+    (n.includes('正確') ||
+      n.includes('おおよそ') ||
+      n.includes('常に許可') ||
+      n.includes('アプリの使用中') ||
+      n.includes('今回のみ') ||
+      n.includes('許可しない'));
   return (
     (permissionCue && (questionCue || buttonCue)) ||
     (termsCue && (buttonCue || questionCue)) ||
     (updateCue && (questionCue || buttonCue)) ||
     (permissionCue && buttonCue) ||
     softPermissionBody ||
-    permissionButtonCluster
+    permissionButtonCluster ||
+    locationPrecisionSheet ||
+    locationTopicSheet
   );
 }
 
 function classifyKind(n: string): PopupKind {
-  if (n.includes('カメラ')) return 'PERMISSION_CAMERA';
-  if (n.includes('マイク') || (n.includes('音声') && n.includes('録音'))) {
+  if (n.includes('カメラ') || n.includes('camera')) return 'PERMISSION_CAMERA';
+  if (
+    n.includes('マイク') ||
+    n.includes('microphone') ||
+    n.includes('mic') ||
+    (n.includes('音声') && n.includes('録音'))
+  ) {
     return 'PERMISSION_MIC';
   }
   if (
     n.includes('写真') ||
     n.includes('画像') ||
     n.includes('ギャラリー') ||
-    n.includes('メディア')
+    n.includes('メディア') ||
+    n.includes('photos') ||
+    n.includes('images')
   ) {
     return 'PERMISSION_PHOTOS';
   }
-  if (n.includes('通知')) return 'PERMISSION_NOTIFICATIONS';
-  if (n.includes('位置') || n.includes('gps') || n.includes('付近の')) {
+  if (n.includes('通知') || n.includes('notification')) return 'PERMISSION_NOTIFICATIONS';
+  if (
+    n.includes('位置') ||
+    n.includes('location') ||
+    n.includes('gps') ||
+    n.includes('付近の')
+  ) {
     return 'PERMISSION_LOCATION';
   }
   if (n.includes('連絡先') || n.includes('アドレス帳')) return 'PERMISSION_CONTACTS';
@@ -185,6 +229,7 @@ function extractButtons(raw: string, n: string): string[] {
     '今回のみ',
     'アプリの使用中のみ',
     '使用中のみ',
+    '常に許可',
     '同意する',
     '同意しない',
     '後で',
@@ -195,6 +240,10 @@ function extractButtons(raw: string, n: string): string[] {
     'OK',
     'はい',
     'いいえ',
+    'While using the app',
+    'Only this time',
+    "Don't allow",
+    'Allow',
   ];
   const found: string[] = [];
   for (const c of candidates) {
