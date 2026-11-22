@@ -358,17 +358,20 @@ class AssistForegroundService : Service() {
       announcedStepId = guidance.stepId
       announcedStageId = guidance.stageId
       lastStepId = guidance.stepId
-      lastGuidance = guidance.displayText
+      // Redact PII for notify / FGS / TTS / emitted display (OCR quotes may leak secrets).
+      val safeDisplay = AssistSecretRedactor.forPublicText(guidance.displayText)
+      val safeVoice = AssistSecretRedactor.forVoice(guidance.voiceText)
+      lastGuidance = safeDisplay
       // Notify + TTS immediately once guidance is decided (no extra delay).
-      AssistNotifier.showGuidance(this, "よりそいAI", guidance.displayText)
-      updateForeground(guidance.displayText)
+      AssistNotifier.showGuidance(this, "よりそいAI", safeDisplay)
+      updateForeground(safeDisplay)
       if (voiceEnabled) {
-        tts?.speakLatest(guidance.voiceText)
+        tts?.speakLatest(safeVoice)
       }
       YorisoiAndroidAssistModule.emitOcrChanged(
         text = normalized,
-        displayText = guidance.displayText,
-        voiceText = guidance.voiceText,
+        displayText = safeDisplay,
+        voiceText = safeVoice,
         mode = guidance.mode,
         stepId = guidance.stepId,
         stageId = guidance.stageId,

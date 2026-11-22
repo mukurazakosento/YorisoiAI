@@ -212,25 +212,47 @@ export function isPopupStable(
   return streak >= Math.max(1, needed);
 }
 
-export function redactSecretsForVoice(text: string): string {
+/** Same masking for notify / FGS / displayText / voice (mirrors AssistSecretRedactor). */
+export function redactSecretsForPublicText(text: string): string {
   return text
     .replace(
-      /(パスワード|パスコード|暗証番号|password|passcode)\s*[:：]?\s*\S+/gi,
+      /(パスワード|パスコード|暗証番号|合言葉|password|passcode|passwd)\s*[:：=]?\s*\S+/gi,
       'パスワード（伏せます）',
     )
     .replace(
-      /(認証コード|確認コード|ワンタイム|OTP|コード)\s*[:：]?\s*\d{4,8}/gi,
+      /(認証コード|確認コード|ワンタイム|セキュリティコード|OTP|コード)\s*[:：=]?\s*\d{4,8}/gi,
       '認証コード（伏せます）',
     )
     .replace(/\b(?:\d[ -]*?){13,19}\b/g, '番号（伏せます）')
-    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, 'メール（伏せます）');
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, 'メール（伏せます）')
+    .replace(
+      /(?:\+?81[-\s]?\d{1,4}|0\d{1,4})[-\s]?\d{1,4}[-\s]?\d{3,4}\b/g,
+      '電話番号（伏せます）',
+    )
+    .replace(
+      /(?:個人番号|マイナンバー)\s*[:：]?\s*\d{4}\s*\d{4}\s*\d{4}/g,
+      '個人番号（伏せます）',
+    )
+    .replace(/(口座番号|口座)\s*[:：]?\s*\d{4,8}/gi, '口座番号（伏せます）');
+}
+
+export function redactSecretsForVoice(text: string): string {
+  return redactSecretsForPublicText(text);
 }
 
 export function containsSensitive(text: string): boolean {
   return (
-    /(パスワード|パスコード|暗証番号|password|passcode)\s*[:：]?\s*\S+/i.test(text) ||
-    /(認証コード|確認コード|ワンタイム|OTP|コード)\s*[:：]?\s*\d{4,8}/i.test(text) ||
-    /\b(?:\d[ -]*?){13,19}\b/.test(text)
+    /(パスワード|パスコード|暗証番号|合言葉|password|passcode|passwd)\s*[:：=]?\s*\S+/i.test(
+      text,
+    ) ||
+    /(認証コード|確認コード|ワンタイム|セキュリティコード|OTP|コード)\s*[:：=]?\s*\d{4,8}/i.test(
+      text,
+    ) ||
+    /\b(?:\d[ -]*?){13,19}\b/.test(text) ||
+    /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(text) ||
+    /(?:\+?81[-\s]?\d{1,4}|0\d{1,4})[-\s]?\d{1,4}[-\s]?\d{3,4}\b/.test(text) ||
+    /(?:個人番号|マイナンバー)\s*[:：]?\s*\d{4}\s*\d{4}\s*\d{4}/.test(text) ||
+    /(口座番号|口座)\s*[:：]?\s*\d{4,8}/i.test(text)
   );
 }
 
@@ -347,7 +369,7 @@ export function explainPopup(detection: PopupDetection): PopupExplainStep {
   return {
     stepId: `popup-${hash}`,
     stageId: `popup-${detection.kind.toLowerCase()}`,
-    displayText: display,
+    displayText: redactSecretsForPublicText(display),
     voiceText: redactSecretsForVoice(voiceRaw),
     mode: 'demo',
   };
@@ -380,14 +402,15 @@ export function explainScreenText(ocrText: string): PopupExplainStep {
     return explainPopup(detection);
   }
   const clipped = raw.length > 80 ? `${raw.slice(0, 80)}…` : raw;
+  const safeClip = redactSecretsForPublicText(clipped);
   const hash = Math.abs(
     clipped.split('').reduce((a, c) => ((a << 5) - a + c.charCodeAt(0)) | 0, 0),
   );
   return {
     stepId: `explain-ocr-${hash}`,
     stageId: 'explain-screen',
-    displayText: `画面には「${clipped.slice(0, 40)}」とあります。`,
-    voiceText: `いまの画面の文字は、だいたい次のとおりです。「${redactSecretsForVoice(clipped)}」。分からなければアプリに戻って聞いてください。代わりには操作しません。`,
+    displayText: `画面には「${safeClip.slice(0, 40)}」とあります。`,
+    voiceText: `いまの画面の文字は、だいたい次のとおりです。「${safeClip}」。分からなければアプリに戻って聞いてください。代わりには操作しません。`,
     mode: 'demo',
   };
 }

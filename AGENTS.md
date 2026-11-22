@@ -52,6 +52,7 @@ npm run smoke:android-assist-guidance
 npm run smoke:assist-ux-four
 npm run smoke:popup-auto-assist
 npm run smoke:ocr-aligned-guidance
+npm run smoke:notify-privacy
 npm run smoke:on-device
 npm run smoke:session
 npm run smoke:speech

@@ -24,9 +24,10 @@ const service = read(
 assert.match(service, /DEFAULT_INTERVAL_MS = 20000/);
 assert.match(service, /coerceIn\(10000L,\s*60000L\)/);
 assert.match(service, /requiredStreak|AssistPopupDetector\.requiredStreak/);
-assert.match(service, /updateForeground\(guidance\.displayText\)/);
+assert.match(service, /updateForeground\(safeDisplay\)/);
 assert.match(service, /AssistNotifier\.showGuidance/);
-assert.match(service, /speakLatest/);
+assert.match(service, /AssistSecretRedactor\.forPublicText/);
+assert.match(service, /speakLatest\(safeVoice\)/);
 
 const moduleKt = read(
   'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/YorisoiAndroidAssistModule.kt',
@@ -46,6 +47,9 @@ const notifier = read(
 assert.match(notifier, /manager\.cancel\(GUIDANCE_ID\)/);
 assert.match(notifier, /PRIORITY_HIGH/);
 assert.match(notifier, /setOnlyAlertOnce\(false\)/);
+assert.match(notifier, /VISIBILITY_PRIVATE/);
+assert.doesNotMatch(notifier, /VISIBILITY_PUBLIC/);
+assert.match(notifier, /AssistSecretRedactor\.forPublicText/);
 
 // --- Popup streak for long interval ---
 const detector = read(

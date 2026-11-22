@@ -56,14 +56,16 @@ object AssistNotifier {
       null
     }
 
+    val safeBody = AssistSecretRedactor.forPublicText(body)
     val builder = NotificationCompat.Builder(context, CHANNEL_ID)
       .setContentTitle(if (paused) "よりそいAI（一時停止）" else "よりそいAI（支援中）")
-      .setContentText(body)
+      .setContentText(safeBody)
       .setSmallIcon(android.R.drawable.ic_menu_info_details)
       .setOngoing(true)
       .setContentIntent(contentPending)
       .setOnlyAlertOnce(true)
       .setCategory(NotificationCompat.CATEGORY_SERVICE)
+      .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
 
     if (paused) {
       builder.addAction(
@@ -106,17 +108,19 @@ object AssistNotifier {
     } else {
       null
     }
+    val safeBody = AssistSecretRedactor.forPublicText(body)
     val notification = NotificationCompat.Builder(context, CHANNEL_ID)
       .setContentTitle(title)
-      .setContentText(body)
-      .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+      .setContentText(safeBody)
+      .setStyle(NotificationCompat.BigTextStyle().bigText(safeBody))
       .setSmallIcon(android.R.drawable.ic_menu_info_details)
       .setContentIntent(pending)
       .setAutoCancel(true)
       .setOnlyAlertOnce(false)
       .setPriority(NotificationCompat.PRIORITY_HIGH)
       .setCategory(NotificationCompat.CATEGORY_MESSAGE)
-      .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+      // Lock screen: hide guidance detail (PII / OCR quotes).
+      .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
       .addAction(
         0,
         "終了",

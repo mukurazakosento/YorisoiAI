@@ -32,6 +32,7 @@ export {
   explainPopup,
   explainScreenText,
   isPopupStable,
+  redactSecretsForPublicText,
   redactSecretsForVoice,
   requiredPopupStreak,
 } from './popupDetect';
