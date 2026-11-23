@@ -21,7 +21,7 @@ assert.match(consultation, /label="電話"/);
 assert.match(consultation, /label="メール"/);
 assert.match(consultation, /startSafetyMode\('phone'\)/);
 assert.match(consultation, /startSafetyMode\('email'\)/);
-assert.match(consultation, /勝手に他の画面は見ません/);
+assert.match(consultation, /通知と音声でお伝えします/);
 assert.doesNotMatch(consultation, /layoutHints/);
 assert.doesNotMatch(consultation, /imageBase64|screenshotBytes|GEMINI_API_KEY|WEBRISK/);
 
@@ -39,8 +39,39 @@ assert.match(features, /HOME_FEATURES:\s*FeatureDefinition\[\]\s*=\s*FEATURES/);
 assert.match(features, /id: 'safetyCheck'/);
 
 const navigate = read('src/utils/navigateToSupport.ts');
-assert.match(navigate, /featureId === 'safetyCheck'/);
-assert.match(navigate, /backgroundAssist:\s*false/);
+assert.match(navigate, /AndroidAssistConsent/);
+assert.match(navigate, /assist\.available/);
+// 安全性も同意画面へ（#22 の MP スキップを撤回）
+assert.doesNotMatch(
+  navigate,
+  /if \(params\.featureId === 'safetyCheck'\)[\s\S]{0,120}backgroundAssist:\s*false/,
+);
+
+const consent = read('src/screens/AndroidAssistConsentScreen.tsx');
+assert.match(consent, /wantsSafety/);
+assert.match(consent, /結果のためにアプリを開き直す必要はありません/);
+
+const notifier = read(
+  'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistNotifier.kt',
+);
+assert.match(notifier, /openAppOnTap/);
+assert.match(notifier, /when false|安全性チェック結果/);
+
+const inspector = read(
+  'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistSafetyInspector.kt',
+);
+assert.match(inspector, /fingerprint/);
+assert.match(inspector, /waitingStep/);
+assert.match(inspector, /pickBestSafetyText/);
+assert.doesNotMatch(inspector, /これは安全です|絶対に安全|安全です。/);
+assert.match(inspector, /安全とは言い切れません|安全とは言いません/);
+
+const fgs = read(
+  'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistForegroundService.kt',
+);
+assert.match(fgs, /AssistSafetySession\.arm/);
+assert.match(fgs, /openAppOnTap = featureId != "safetyCheck"/);
+assert.match(fgs, /featureId == "safetyCheck"/);
 
 const explanationPanel = read('src/components/ExplanationResultPanel.tsx');
 assert.match(explanationPanel, /表示された文章/);

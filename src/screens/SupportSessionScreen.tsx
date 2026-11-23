@@ -80,8 +80,8 @@ type SafetyUiPhase = 'none' | 'phone_consent' | 'result';
  * 支援セッション: start → guiding（一手ずつ）→ offer_end → EndSupport。
  * Phase D: 利用者開始のフレーム取り込み＋端末内 OCR（確認済み文字のみ案内へ）。
  * Android: 任意で MediaProjection 背面支援（同意済みのときのみ）。
- * 安全性: 電話／メール選択後のみ画面文字を調べ、結果を通知＋TTS（＋短い画面表示）。
- * スクロール禁止。消音でも画面の displayText は必ず出す。
+ * 安全性: 電話／メール選択後に MediaProjection 背面検出 → 通知＋TTSのみ
+ * （結果のために Activity を前面に戻さない）。スクロール禁止。
  */
 export function SupportSessionScreen({ navigation, route }: Props) {
   const { featureId, summary, backgroundAssist } = route.params;
@@ -110,8 +110,8 @@ export function SupportSessionScreen({ navigation, route }: Props) {
   const [consentPhone, setConsentPhone] = useState('');
   const [pendingSafetyText, setPendingSafetyText] = useState('');
   const startedRef = useRef(false);
-  // 安全性は既定で連続 MediaProjection しない（navigateToSupport 側でも false）
-  const wantsBackgroundAssist = backgroundAssist === true && !isSafety;
+  // 安全性も背面 MediaProjection 可（同意済みのとき）。結果は通知+TTS が主経路。
+  const wantsBackgroundAssist = backgroundAssist === true;
 
   const step = script?.steps[stepIndex];
   const displayText =
@@ -151,15 +151,16 @@ export function SupportSessionScreen({ navigation, route }: Props) {
     return subscribeAndroidAssistSession(setAndroidAssist);
   }, []);
 
-  // 背面支援の OCR 変化 → 画面の一手を更新（ネイティブ通知/TTS と併用。デモ明示）
+  // 背面支援の OCR 変化 → 画面の一手を更新（ネイティブ通知/TTS が主。デモ明示）
+  // 安全性: Activity を前面に戻さず、もし画面が残っていれば表示だけ同期する。
   useEffect(() => {
     const g = androidAssist.lastGuidance;
-    if (!g || phase !== 'guiding' || isSafety) {
+    if (!g || phase !== 'guiding') {
       return;
     }
     setScript({
       id: `android-assist-${g.stepId}`,
-      title: '背面支援の案内',
+      title: isSafety ? '安全性の背面案内' : '背面支援の案内',
       isDemo: true,
       steps: [
         {
@@ -172,6 +173,9 @@ export function SupportSessionScreen({ navigation, route }: Props) {
     });
     setStepIndex(0);
     setTone('normal');
+    if (isSafety && g.stageId === 'safety-result') {
+      setSafetyUi('result');
+    }
   }, [androidAssist.lastGuidance, phase, isSafety]);
 
   // セッション開始: 端末内AI（未接続時はデモ）＋収録境界＋通知許可＋任意の背面支援

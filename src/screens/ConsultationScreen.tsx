@@ -201,7 +201,7 @@ export function ConsultationScreen({ navigation, route }: Props) {
             ]}
             numberOfLines={2}
           >
-            電話かメールを選んだあと、その画面の文字だけを調べます。勝手に他の画面は見ません。
+            電話かメールを選んだあと、画面共有して番号や文を見つけ、通知と音声でお伝えします。
           </Text>
           <View style={styles.methodActions}>
             <PrimaryButton
