@@ -4,8 +4,8 @@ const {
 } = require('@expo/config-plugins');
 
 /**
- * Adds MediaProjection Foreground Service permissions and the assist service.
- * Does not add boot receivers or auto-start.
+ * Adds MediaProjection FGS + optional AccessibilityService for system dialog text.
+ * Does not add boot receivers or auto-start. Does not edit app.json EAS ids.
  */
 function withYorisoiAndroidAssist(config) {
   return withAndroidManifest(config, (config) => {
@@ -37,18 +37,60 @@ function withYorisoiAndroidAssist(config) {
       app.service = [];
     }
 
-    const serviceName =
+    const fgsName =
       'expo.modules.yorisoiandroidassist.AssistForegroundService';
-    const already = app.service.some(
-      (s) => s.$?.['android:name'] === serviceName,
-    );
-    if (!already) {
+    if (!app.service.some((s) => s.$?.['android:name'] === fgsName)) {
       app.service.push({
         $: {
-          'android:name': serviceName,
+          'android:name': fgsName,
           'android:exported': 'false',
           'android:foregroundServiceType': 'mediaProjection',
         },
+      });
+    }
+
+    const a11yName =
+      'expo.modules.yorisoiandroidassist.AssistDialogAccessibilityService';
+    const a11yExisting = app.service.find(
+      (s) => s.$?.['android:name'] === a11yName,
+    );
+    if (a11yExisting) {
+      // Ensure exported=true (intent-filter + API 31+) and BIND permission.
+      a11yExisting.$ = {
+        ...(a11yExisting.$ || {}),
+        'android:name': a11yName,
+        'android:exported': 'true',
+        'android:permission':
+          'android.permission.BIND_ACCESSIBILITY_SERVICE',
+      };
+    } else {
+      app.service.push({
+        $: {
+          'android:name': a11yName,
+          'android:exported': 'true',
+          'android:permission':
+            'android.permission.BIND_ACCESSIBILITY_SERVICE',
+        },
+        'intent-filter': [
+          {
+            action: [
+              {
+                $: {
+                  'android:name':
+                    'android.accessibilityservice.AccessibilityService',
+                },
+              },
+            ],
+          },
+        ],
+        'meta-data': [
+          {
+            $: {
+              'android:name': 'android.accessibilityservice',
+              'android:resource': '@xml/yorisoi_assist_accessibility',
+            },
+          },
+        ],
       });
     }
 

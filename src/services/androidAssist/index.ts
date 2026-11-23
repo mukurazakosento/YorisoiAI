@@ -47,7 +47,7 @@ export {
 } from './popupDetect';
 export type { PopupDetection, PopupExplainStep, PopupKind } from './popupDetect';
 
-export { resolveAssistGuidance } from './resolveGuidance';
+export { pickBestDialogText, resolveAssistGuidance } from './resolveGuidance';
 export type { ResolveGuidanceInput, ResolveGuidanceResult } from './resolveGuidance';
 
 export {
@@ -60,3 +60,6 @@ export {
   stopAndroidAssistSession,
   subscribeAndroidAssistSession,
 } from './session';
+
+// dialogAccessibility is imported directly by screens (lazy native require).
+// Not re-exported here so Node smokes avoid pulling react-native.

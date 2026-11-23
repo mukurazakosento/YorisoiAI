@@ -273,6 +273,8 @@ class AssistForegroundService : Service() {
     phase = "running"
     frameCount = 0
     lastOcrText = ""
+    // Allow optional AccessibilityService to publish system-dialog text while session runs.
+    AssistDialogTextHolder.setSessionActive(true)
     YorisoiAndroidAssistModule.emitPhase("running", null)
     workerHandler?.postDelayed(loopRunnable, 800L)
   }
@@ -337,7 +339,12 @@ class AssistForegroundService : Service() {
 
       YorisoiAndroidAssistModule.emitFrame(frameCount, text.length)
 
-      val normalized = text.replace("\\s+".toRegex(), " ").trim()
+      val ocrNormalized = text.replace("\\s+".toRegex(), " ").trim()
+      // System permission sheets are often missing from MediaProjection (app-share /
+      // OEM blanking). Merge recent Accessibility dialog text when OCR is empty or
+      // weaker for dialog detection — text only, no images.
+      val a11yText = AssistDialogTextHolder.peekRecent()
+      val normalized = pickBestDialogText(ocrNormalized, a11yText)
       val ocrChanged = normalized != lastOcrText
       if (normalized.isNotEmpty()) {
         lastOcrText = normalized
@@ -450,6 +457,26 @@ class AssistForegroundService : Service() {
     )
   }
 
+  /**
+   * Prefer text that looks like a system/app permission dialog.
+   * Accessibility fill-in wins when OCR is empty or OCR is not dialog-like.
+   */
+  private fun pickBestDialogText(ocrText: String, a11yText: String): String {
+    if (a11yText.isBlank()) {
+      return ocrText
+    }
+    if (ocrText.isBlank()) {
+      return a11yText
+    }
+    val ocrDialog = AssistPopupDetector.detect(ocrText) != null
+    val a11yDialog = AssistPopupDetector.detect(a11yText) != null
+    return when {
+      a11yDialog && !ocrDialog -> a11yText
+      a11yDialog && ocrDialog && a11yText.length >= ocrText.length -> a11yText
+      else -> ocrText
+    }
+  }
+
   private fun updateForeground(body: String) {
     val notification = AssistNotifier.buildForegroundNotification(this, body, paused)
     val manager = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
@@ -486,6 +513,7 @@ class AssistForegroundService : Service() {
 
     // Explicitly clear holder so the old token cannot be reused.
     AssistProjectionHolder.clearAll()
+    AssistDialogTextHolder.setSessionActive(false)
 
     tts?.stop()
     AssistNotifier.cancelGuidance(this)

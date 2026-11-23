@@ -50,7 +50,8 @@ assert.match(service, /DEFAULT_INTERVAL_MS = 20000/);
 assert.match(service, /AssistOcrHelper/);
 assert.match(service, /AssistProjectionHolder\.clearAll/);
 assert.doesNotMatch(service, /BOOT_COMPLETED|RECEIVE_BOOT/);
-assert.doesNotMatch(service, /AccessibilityService|dispatchGesture|performGlobalAction/);
+// Optional session-scoped Accessibility text OK; never auto-tap.
+assert.doesNotMatch(service, /dispatchGesture|performGlobalAction|ACTION_CLICK/);
 
 const ocrHelper = read(
   'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistOcrHelper.kt',

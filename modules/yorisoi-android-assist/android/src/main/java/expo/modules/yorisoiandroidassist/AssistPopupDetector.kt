@@ -95,7 +95,9 @@ object AssistPopupDetector {
         n.contains("アクセス") ||
         n.contains("使ってよろしい") ||
         n.contains("使用を許可") ||
-        n.contains("使用することを許可")
+        n.contains("使用することを許可") ||
+        n.contains("allow") ||
+        n.contains("access")
     val termsCue =
       n.contains("利用規約") ||
         n.contains("プライバシー") ||
@@ -121,12 +123,19 @@ object AssistPopupDetector {
         n.contains("今回のみ") ||
         n.contains("アプリの使用中") ||
         n.contains("許可する") ||
+        n.contains("常に許可") ||
         n.contains("同意") ||
         n.contains("後で") ||
-        n.contains("今はしない")
+        n.contains("今はしない") ||
+        // n is spaceless — English OEM strings
+        n.contains("don'tallow") ||
+        n.contains("dontallow") ||
+        n.contains("whileusingtheapp") ||
+        n.contains("onlythistime") ||
+        n.contains("allowonlywhile")
     // Body mentions a permission topic even when OCR missed 「しますか」 / buttons.
     val softPermissionBody =
-      (n.contains("アクセス") || n.contains("許可")) &&
+      (n.contains("アクセス") || n.contains("許可") || n.contains("access") || n.contains("allow")) &&
         (n.contains("カメラ") ||
           n.contains("マイク") ||
           n.contains("写真") ||
@@ -135,35 +144,66 @@ object AssistPopupDetector {
           n.contains("音楽") ||
           n.contains("メディア") ||
           n.contains("位置") ||
+          n.contains("location") ||
           n.contains("通知") ||
+          n.contains("notification") ||
           n.contains("連絡先") ||
           n.contains("ファイル") ||
           n.contains("ストレージ") ||
-          n.contains("bluetooth"))
+          n.contains("bluetooth") ||
+          n.contains("camera") ||
+          n.contains("microphone"))
     // Typical system permission button cluster (body OCR often empty).
     val permissionButtonCluster =
-      n.contains("許可しない") &&
+      (n.contains("許可しない") || n.contains("don'tallow") || n.contains("dontallow")) &&
         (n.contains("一度だけ") ||
           n.contains("今回のみ") ||
           n.contains("アプリの使用中") ||
           n.contains("許可する") ||
-          n.contains("許可"))
+          n.contains("常に許可") ||
+          n.contains("許可") ||
+          n.contains("whileusing") ||
+          n.contains("onlythistime"))
+    // Android 12+ location sheet: precise / approximate radios without 「許可」 in OCR.
+    val locationPrecisionSheet =
+      (n.contains("正確な位置") || n.contains("precise")) &&
+        (n.contains("おおよそ") || n.contains("approximate"))
+    val locationTopicSheet =
+      n.contains("位置情報") &&
+        (n.contains("正確") ||
+          n.contains("おおよそ") ||
+          n.contains("常に許可") ||
+          n.contains("アプリの使用中") ||
+          n.contains("今回のみ") ||
+          n.contains("許可しない"))
     return (permissionCue && (questionCue || buttonCue)) ||
       (termsCue && (buttonCue || questionCue)) ||
       (updateCue && (questionCue || buttonCue)) ||
       (permissionCue && buttonCue) ||
       softPermissionBody ||
-      permissionButtonCluster
+      permissionButtonCluster ||
+      locationPrecisionSheet ||
+      locationTopicSheet
   }
 
   private fun classifyKind(n: String): PopupKind {
     return when {
-      n.contains("カメラ") -> PopupKind.PERMISSION_CAMERA
-      n.contains("マイク") || (n.contains("音声") && n.contains("録音")) -> PopupKind.PERMISSION_MIC
-      n.contains("写真") || n.contains("画像") || n.contains("ギャラリー") || n.contains("メディア") ->
-        PopupKind.PERMISSION_PHOTOS
-      n.contains("通知") -> PopupKind.PERMISSION_NOTIFICATIONS
-      n.contains("位置") || n.contains("gps") || n.contains("付近の") -> PopupKind.PERMISSION_LOCATION
+      n.contains("カメラ") || n.contains("camera") -> PopupKind.PERMISSION_CAMERA
+      n.contains("マイク") ||
+        n.contains("microphone") ||
+        n.contains("mic") ||
+        (n.contains("音声") && n.contains("録音")) -> PopupKind.PERMISSION_MIC
+      n.contains("写真") ||
+        n.contains("画像") ||
+        n.contains("ギャラリー") ||
+        n.contains("メディア") ||
+        n.contains("photos") ||
+        n.contains("images") -> PopupKind.PERMISSION_PHOTOS
+      n.contains("通知") || n.contains("notification") -> PopupKind.PERMISSION_NOTIFICATIONS
+      n.contains("位置") ||
+        n.contains("location") ||
+        n.contains("gps") ||
+        n.contains("付近の") -> PopupKind.PERMISSION_LOCATION
       n.contains("連絡先") || n.contains("アドレス帳") -> PopupKind.PERMISSION_CONTACTS
       n.contains("ファイル") || n.contains("ストレージ") || n.contains("フォルダ") ->
         PopupKind.PERMISSION_FILES
@@ -172,7 +212,8 @@ object AssistPopupDetector {
       n.contains("アップデート") || n.contains("新しいバージョン") || n.contains("更新") ->
         PopupKind.UPDATE
       n.contains("インストール") -> PopupKind.INSTALL
-      n.contains("許可") || n.contains("アクセス") -> PopupKind.PERMISSION_GENERIC
+      n.contains("許可") || n.contains("アクセス") || n.contains("allow") || n.contains("access") ->
+        PopupKind.PERMISSION_GENERIC
       else -> PopupKind.UNKNOWN_DIALOG
     }
   }
@@ -211,6 +252,7 @@ object AssistPopupDetector {
         "今回のみ",
         "アプリの使用中のみ",
         "使用中のみ",
+        "常に許可",
         "同意する",
         "同意しない",
         "後で",
@@ -221,6 +263,10 @@ object AssistPopupDetector {
         "OK",
         "はい",
         "いいえ",
+        "While using the app",
+        "Only this time",
+        "Don't allow",
+        "Allow",
       )
     for (c in candidates) {
       if (raw.contains(c) || n.contains(normalize(c))) {

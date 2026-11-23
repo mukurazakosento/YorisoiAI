@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Always-on permission/confirm dialog text reader (no auto-tap).
+  Primary path for 文章説明 of system sheets when MediaProjection cannot see them.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+  android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged"
+  android:accessibilityFeedbackType="feedbackGeneric"
+  android:accessibilityFlags="flagRetrieveInteractiveWindows|flagReportViewIds"
+  android:canRetrieveWindowContent="true"
+  android:description="@string/yorisoi_assist_accessibility_description"
+  android:notificationTimeout="200"
+  android:settingsActivity="" />

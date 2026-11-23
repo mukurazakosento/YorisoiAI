@@ -1,9 +1,14 @@
 package expo.modules.yorisoiandroidassist
 
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
+import android.media.projection.MediaProjectionConfig
 import android.media.projection.MediaProjectionManager
 import android.os.Build
+import android.provider.Settings
+import android.view.accessibility.AccessibilityManager
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -134,7 +139,19 @@ class YorisoiAndroidAssistModule : Module() {
 
       val mpm =
         activity.getSystemService(Activity.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-      val captureIntent = mpm.createScreenCaptureIntent()
+      // Android 14+ default offers single-app share, which excludes system UI
+      // (PermissionController 位置情報/カメラ等). Force entire-display capture so
+      // system permission sheets can appear in the VirtualDisplay when the OEM allows.
+      val captureIntent =
+        if (Build.VERSION.SDK_INT >= 34) {
+          try {
+            mpm.createScreenCaptureIntent(MediaProjectionConfig.createConfigForDefaultDisplay())
+          } catch (_: Exception) {
+            mpm.createScreenCaptureIntent()
+          }
+        } else {
+          mpm.createScreenCaptureIntent()
+        }
       try {
         activity.startActivityForResult(captureIntent, REQUEST_MEDIA_PROJECTION)
       } catch (e: Exception) {
@@ -142,6 +159,32 @@ class YorisoiAndroidAssistModule : Module() {
         promise.reject(
           "PERMISSION_START_FAILED",
           "画面共有の許可を開始できませんでした: ${e.message ?: "不明"}",
+          e,
+        )
+      }
+    }
+
+    Function("isDialogAccessibilityEnabled") {
+      val context = appContext.reactContext ?: return@Function false
+      isOurAccessibilityEnabled(context)
+    }
+
+    AsyncFunction("openDialogAccessibilitySettings") { promise: Promise ->
+      val context = appContext.reactContext
+      if (context == null) {
+        promise.reject("NO_CONTEXT", "設定を開けませんでした。", null)
+        return@AsyncFunction
+      }
+      try {
+        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+          addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+        promise.resolve(mapOf("ok" to true))
+      } catch (e: Exception) {
+        promise.reject(
+          "SETTINGS_FAILED",
+          "設定アプリを開けませんでした: ${e.message ?: "不明"}",
           e,
         )
       }
@@ -266,6 +309,18 @@ class YorisoiAndroidAssistModule : Module() {
       promise.resolve(mapOf("ok" to true))
     } catch (e: Exception) {
       promise.reject("ACTION_FAILED", e.message ?: "failed", e)
+    }
+  }
+
+  private fun isOurAccessibilityEnabled(context: Context): Boolean {
+    val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as? AccessibilityManager
+      ?: return false
+    val enabled = am.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
+      ?: return false
+    val target = AssistDialogAccessibilityService::class.java.name
+    return enabled.any { info ->
+      val id = info.resolveInfo?.serviceInfo?.let { "${it.packageName}/${it.name}" }.orEmpty()
+      id.contains(target) || info.resolveInfo?.serviceInfo?.name == target
     }
   }
 }

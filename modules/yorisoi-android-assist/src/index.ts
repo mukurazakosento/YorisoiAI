@@ -106,6 +106,30 @@ export async function stopAndroidAssistNative(): Promise<void> {
   await native.stopAssist();
 }
 
+/** True when the optional dialog AccessibilityService is enabled in system settings. */
+export function isAndroidDialogAccessibilityEnabled(): boolean {
+  const native = getNativeAndroidAssistModule();
+  if (!native?.isDialogAccessibilityEnabled) {
+    return false;
+  }
+  try {
+    return native.isDialogAccessibilityEnabled();
+  } catch {
+    return false;
+  }
+}
+
+/** Opens Android Accessibility settings so the user can enable dialog text reading. */
+export async function openAndroidDialogAccessibilitySettings(): Promise<void> {
+  const native = requireNative();
+  if (!native?.openDialogAccessibilitySettings) {
+    throw new AndroidAssistUnavailableError(
+      'このビルドではシステム許可ダイアログ用の読み取り設定を開けません。',
+    );
+  }
+  await native.openDialogAccessibilitySettings();
+}
+
 export function subscribeAndroidAssistPhase(
   listener: (event: AndroidAssistPhaseEvent) => void,
 ): () => void {
