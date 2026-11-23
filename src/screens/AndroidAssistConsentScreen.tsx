@@ -29,6 +29,7 @@ export function AndroidAssistConsentScreen({ navigation, route }: Props) {
   const assist = getAndroidAssistAvailability();
   const aiDemo = !isOnDeviceAiReady();
   const wantsTextExplain = featureId === 'textExplanation';
+  const wantsSafety = featureId === 'safetyCheck';
   const a11yOn = wantsTextExplain ? isAndroidDialogAccessibilityEnabled() : false;
 
   const goWithAssist = () => {
@@ -60,7 +61,9 @@ export function AndroidAssistConsentScreen({ navigation, route }: Props) {
         numberOfLines={2}
         accessibilityRole="header"
       >
-        背面でも案内を続けますか？
+        {wantsSafety
+          ? '画面共有して調べますか？'
+          : '背面でも案内を続けますか？'}
       </Text>
 
       <View style={styles.body}>
@@ -68,13 +71,15 @@ export function AndroidAssistConsentScreen({ navigation, route }: Props) {
           style={[styles.line, { fontSize: fontSize(baseFontSizes.body) }]}
           numberOfLines={3}
         >
-          次の画面で「画面全体」の共有を許可すると、よりそいAIを背面にしても画面の文字を読み、変わったときだけ案内します。
+          {wantsSafety
+            ? '次の画面で「画面全体」の共有を許可すると、電話やメールを開いたまま、番号や文を見つけて通知と音声でお伝えします。結果のためにアプリを開き直す必要はありません。'
+            : '次の画面で「画面全体」の共有を許可すると、よりそいAIを背面にしても画面の文字を読み、変わったときだけ案内します。'}
         </Text>
         <Text
           style={[styles.line, { fontSize: fontSize(baseFontSizes.body) }]}
           numberOfLines={2}
         >
-          画像は端末の中だけ・保存しません。代わりにタップや送信はしません。
+          画像は端末の中だけ・保存しません。代わりにタップや送信・発信はしません。
         </Text>
         {wantsTextExplain ? (
           <Text
@@ -84,6 +89,14 @@ export function AndroidAssistConsentScreen({ navigation, route }: Props) {
             {a11yOn
               ? 'ポップアップ自動解説はオンです。アプリを閉じても許可画面を通知と音声で説明します（自動タップなし）。'
               : '位置情報などの許可画面は、設定で「ポップアップ自動解説」を一度オンにすると、アプリを閉じても説明できます。'}
+          </Text>
+        ) : null}
+        {wantsSafety ? (
+          <Text
+            style={[styles.line, { fontSize: fontSize(baseFontSizes.caption) }]}
+            numberOfLines={2}
+          >
+            同じ番号やメールは繰り返し案内しません。通知から一時停止・終了できます。
           </Text>
         ) : null}
         <Text

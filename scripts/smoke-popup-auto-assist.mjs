@@ -156,6 +156,7 @@ const {
   assistIntervalForFeature,
   TEXT_EXPLAIN_ASSIST_INTERVAL_MS,
   OPS_ASSIST_INTERVAL_MS,
+  SAFETY_ASSIST_INTERVAL_MS,
 } = await import(assistUrl);
 
 const featuresUrl = pathToFileURL(
@@ -240,14 +241,32 @@ const linePick = buildGuidanceFromOcrText({
 });
 assert.equal(linePick.stepId, 'line-pick-photo');
 
-// --- safety still coded ---
-const safety = buildGuidanceFromOcrText({
+// --- safety background detect (no return-to-app) ---
+const safetyWait = buildGuidanceFromOcrText({
   featureId: 'safetyCheck',
-  goalSummary: 'この電話は安全？',
-  ocrText: '0120-XXX 今すぐ振込',
+  goalSummary: '電話番号を確認したい',
+  ocrText: '設定 ホーム アプリ',
 });
-assert.equal(safety.stageId, 'safety');
-assert.match(safety.voiceText, /決めつけない/);
+assert.equal(safetyWait.stageId, 'safety-wait');
+assert.match(safetyWait.voiceText, /通知/);
+assert.doesNotMatch(safetyWait.voiceText, /アプリに戻って調べて/);
+
+const safetyHit = buildGuidanceFromOcrText({
+  featureId: 'safetyCheck',
+  goalSummary: '電話番号を確認したい',
+  ocrText: '着信 090-1234-5678',
+});
+assert.equal(safetyHit.stageId, 'safety-result');
+assert.match(safetyHit.stepId, /safety-hit-/);
+assert.doesNotMatch(safetyHit.voiceText, /安全です(?!」とは|とは言)/);
+
+const safetyMail = buildGuidanceFromOcrText({
+  featureId: 'safetyCheck',
+  goalSummary: 'メールの内容を確認したい',
+  ocrText: '至急！未払い料金があります。http://bit.ly/evil で認証コードを入力',
+});
+assert.equal(safetyMail.stageId, 'safety-result');
+assert.equal(safetyMail.displayText.includes('危険') || safetyMail.voiceText.includes('危険'), true);
 
 // --- Broader Japanese dialog cues ---
 assert.ok(detectPopup('新しいバージョンが利用可能です 更新 後で'));
@@ -297,6 +316,7 @@ assert.equal(detectPopup('設定 Wi-Fi 接続済み'), null);
 // --- textExplanation FGS path: popup → explanation on first sample ---
 assert.equal(assistIntervalForFeature('textExplanation'), TEXT_EXPLAIN_ASSIST_INTERVAL_MS);
 assert.equal(assistIntervalForFeature('operationSupport'), OPS_ASSIST_INTERVAL_MS);
+assert.equal(assistIntervalForFeature('safetyCheck'), SAFETY_ASSIST_INTERVAL_MS);
 assert.equal(OPS_ASSIST_INTERVAL_MS, 20_000);
 const popupFire = resolveAssistGuidance({
   featureId: 'textExplanation',

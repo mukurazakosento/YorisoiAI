@@ -164,6 +164,11 @@ class AssistForegroundService : Service() {
         // Old min 10s clamp blocked fast popup polling for 文章説明.
         intervalMs = intent.getLongExtra(EXTRA_INTERVAL_MS, DEFAULT_INTERVAL_MS).coerceIn(3000L, 60000L)
         tts?.setEnabled(voiceEnabled)
+        if (featureId == "safetyCheck") {
+          AssistSafetySession.arm(AssistSafetyInspector.resolveMode(goalSummary))
+        } else {
+          AssistSafetySession.disarm()
+        }
         startProjectionSession()
         return START_STICKY
       }
@@ -343,8 +348,15 @@ class AssistForegroundService : Service() {
       // System permission sheets are often missing from MediaProjection (app-share /
       // OEM blanking). Merge recent Accessibility dialog text when OCR is empty or
       // weaker for dialog detection — text only, no images.
-      val a11yText = AssistDialogTextHolder.peekRecent()
-      val normalized = pickBestDialogText(ocrNormalized, a11yText)
+      // Safety: also one-shot peek active window when armed (prefer a11y for phone/email).
+      val a11yText = collectAssistTextForFeature()
+      val normalized =
+        if (featureId == "safetyCheck") {
+          val mode = AssistSafetyInspector.resolveMode(goalSummary)
+          AssistSafetyInspector.pickBestSafetyText(ocrNormalized, a11yText, mode)
+        } else {
+          pickBestDialogText(ocrNormalized, a11yText)
+        }
       val ocrChanged = normalized != lastOcrText
       if (normalized.isNotEmpty()) {
         lastOcrText = normalized
@@ -370,8 +382,9 @@ class AssistForegroundService : Service() {
       val safeDisplay = AssistSecretRedactor.forPublicText(guidance.displayText)
       val safeVoice = AssistSecretRedactor.forVoice(guidance.voiceText)
       lastGuidance = safeDisplay
-      // Notify + TTS immediately once guidance is decided (no extra delay).
-      AssistNotifier.showGuidance(this, "よりそいAI", safeDisplay)
+      // Safety results: notify + TTS only — do not reopen the Activity on tap.
+      val openAppOnTap = featureId != "safetyCheck"
+      AssistNotifier.showGuidance(this, "よりそいAI", safeDisplay, openAppOnTap)
       updateForeground(safeDisplay)
       if (voiceEnabled) {
         tts?.speakLatest(safeVoice)
@@ -402,6 +415,7 @@ class AssistForegroundService : Service() {
   /**
    * Popup-first path: stable dialog → grounded explain (dedupe by fingerprint).
    * Else feature path: textExplanation uses OCR summary; operationSupport uses stages.
+   * Safety: skip popup path — detect phone/email and advise in background.
    * Returns null when nothing new to announce this capture.
    */
   private fun resolveGuidance(
@@ -412,6 +426,23 @@ class AssistForegroundService : Service() {
       pendingPopupFingerprint = null
       popupStreak = 0
       return AssistGuidanceRules.unreadableStep()
+    }
+
+    // 安全性: 電話／メール検出を優先（許可ポップアップ経路で止めない）
+    if (featureId == "safetyCheck") {
+      if (!ocrChanged && announcedStepId.isNotEmpty() &&
+        announcedStageId != "unreadable" &&
+        announcedStageId != "safety-wait"
+      ) {
+        // Keep re-checking while waiting; once a result fingerprint is announced, stay quiet
+        // until OCR changes (new number/email).
+        return null
+      }
+      return AssistGuidanceRules.buildNextStep(
+        featureId = featureId,
+        goalSummary = goalSummary,
+        ocrText = normalized,
+      )
     }
 
     val detection = AssistPopupDetector.detect(normalized)
@@ -455,6 +486,26 @@ class AssistForegroundService : Service() {
       goalSummary = goalSummary,
       ocrText = normalized,
     )
+  }
+
+  /**
+   * Dialog holder text for ops/text; for safety also peek active window when a11y is on.
+   */
+  private fun collectAssistTextForFeature(): String {
+    val recent = AssistDialogTextHolder.peekRecent()
+    if (featureId != "safetyCheck" || !AssistSafetySession.isArmed()) {
+      return recent
+    }
+    val peeked = AssistDialogAccessibilityService.peekActiveWindowText()
+    if (peeked.isBlank()) {
+      return recent
+    }
+    if (recent.isBlank()) {
+      return peeked
+    }
+    // Prefer whichever helps phone/email detection.
+    val mode = AssistSafetyInspector.resolveMode(goalSummary)
+    return AssistSafetyInspector.pickBestSafetyText(recent, peeked, mode)
   }
 
   /**
@@ -514,6 +565,7 @@ class AssistForegroundService : Service() {
     // Explicitly clear holder so the old token cannot be reused.
     AssistProjectionHolder.clearAll()
     AssistDialogTextHolder.setSessionActive(false)
+    AssistSafetySession.disarm()
 
     tts?.stop()
     AssistNotifier.cancelGuidance(this)

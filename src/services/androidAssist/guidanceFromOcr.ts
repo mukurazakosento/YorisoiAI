@@ -1,4 +1,8 @@
 import type { FeatureId } from '../../types/navigation';
+import {
+  inspectSafetyText,
+  resolveSafetyInspectMode,
+} from '../security';
 import { detectPopup, explainPopup, explainScreenText } from './popupDetect';
 import type { AndroidAssistGuidance } from './types';
 
@@ -29,27 +33,49 @@ export function buildGuidanceFromOcrText(input: {
   }
 
   if (input.featureId === 'safetyCheck') {
-    // Continuous MP is not the default for safety; if somehow running, stay
-    // honest and never claim live AI. Prefer quoting visible labels only.
-    const snippet = clipQuote(ocrRaw, 24);
-    const goal = normalize(input.goalSummary);
-    const lookingPhone =
-      goal.includes('電話') || goal.includes('番号') || goal.includes('着信');
-    const lookingMail =
-      goal.includes('メール') || goal.includes('sms') || goal.includes('メッセージ');
+    // Background path (JS mirror of native AssistSafetyInspector): detect and
+    // advise without asking the user to reopen YorisoiAI.
+    const mode =
+      resolveSafetyInspectMode({ summary: input.goalSummary }) ?? 'phone';
+    const result = inspectSafetyText({
+      mode,
+      text: ocrRaw,
+      searchConsent: false,
+    });
+    if (
+      result.status === 'safety_result' &&
+      (result.detectedPhones.length > 0 ||
+        result.detectedEmails.length > 0 ||
+        result.riskLevel === 'dangerous' ||
+        result.riskLevel === 'caution')
+    ) {
+      const fp =
+        result.detectedPhones[0]?.digits ||
+        result.detectedEmails[0] ||
+        `${result.riskLevel}-${clipQuote(ocrRaw, 12)}`;
+      return base({
+        stepId: `safety-hit-${fp}`,
+        stageId: 'safety-result',
+        displayText:
+          result.displayText?.trim() ||
+          '確認結果をお伝えします（安全とは言いません）',
+        voiceText:
+          result.voiceText?.trim() ||
+          result.message?.trim() ||
+          '確認結果です。安全とは言い切れません。',
+      });
+    }
     return base({
-      stepId: lookingMail ? 'safety-mail-review' : 'safety-phone-review',
-      stageId: 'safety',
-      displayText: lookingPhone
-        ? `「${snippet}」など、番号が見えたらアプリに戻って調べてください。`
-        : lookingMail
-          ? `「${snippet}」など、メールの文が見えたらアプリに戻って調べてください。`
-          : `画面の「${snippet}」を確認し、アプリに戻って調べてください。`,
-      voiceText: lookingPhone
-        ? `画面には「${snippet}」などとあります。番号を確認したら、よりそいAIに戻って「画面の文字を調べる」を押してください。安全だと決めつけないでください。自動ではかけません。`
-        : lookingMail
-          ? `画面には「${snippet}」などとあります。メールの文を確認したら、よりそいAIに戻って調べてください。リンクはまだ押さないでください。安全だと決めつけないでください。`
-          : `画面には「${snippet}」などとあります。確認したらアプリに戻って調べてください。安全だと決めつけないでください。`,
+      stepId: mode === 'email' ? 'safety-waiting-email' : 'safety-waiting-phone',
+      stageId: 'safety-wait',
+      displayText:
+        mode === 'email'
+          ? 'メールやメッセージを開いてください。見つかったら通知でお伝えします。'
+          : '電話アプリで番号を出してください。見つかったら通知でお伝えします。',
+      voiceText:
+        mode === 'email'
+          ? 'メールやメッセージを開いてください。怪しい文が見つかったら通知と音声でお伝えします。アプリに戻らなくて大丈夫です。自動では送りません。'
+          : '電話アプリを開いて番号を出してください。見つかったら通知と音声でお伝えします。アプリに戻らなくて大丈夫です。自動ではかけません。',
     });
   }
 

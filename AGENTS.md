@@ -11,7 +11,7 @@
 - 未接続時は明示 **デモ / AI未接続**。`mode: live` はエンジン ready のときだけ
 - **画面フレーム**: `src/services/capture/`（利用者開始のスクショ選択＋端末内 OCR。Broadcast Upload は未リンク）
 - **Android 背面支援**: `modules/yorisoi-android-assist` + `src/services/androidAssist/`（MediaProjection＋FGS・操作支援は約20秒 OCR、文章説明は約4秒でポップアップ捕捉・変化時案内＋即時通知）。Android 14+ は画面全体共有を要求。**ポップアップ自動解説**は設定で一度オンにした AccessibilityService が常時稼働（Activity 非表示でも許可ダイアログを通知+TTS・自動タップなし・MediaProjection不要）。案内は OCR ラベル引用。iOS/Web/Expo Go では不可
-- **ホーム**: 操作支援＋文章説明＋安全性チェック（`HOME_FEATURES`）。安全性は電話／メール選択後のみ画面文字を調べる（常時監視しない）
+- **ホーム**: 操作支援＋文章説明＋安全性チェック（`HOME_FEATURES`）。安全性は電話／メール選択後に MediaProjection 背面検出→通知+TTS（結果で Activity を前面に戻さない。自動発信・送信・タップなし）
 - OCR: `modules/yorisoi-mlkit-ocr`（ML Kit 日本語・端末内のみ。Android は bundled モデル）。背面支援も同一 ML Kit 系を再利用（OCR Expo モジュールは増やさない）。確認済みテキストだけ案内へ
 - 旧 `functions/` Gemini Callable は `EXPO_PUBLIC_LEGACY_CLOUD_AI=true` の任意経路（必須にしない）
 - 音声は Expo Speech（`src/services/speech/`）。背面支援中は Android TTS も使用。displayText と voiceText を分離

@@ -93,28 +93,40 @@ object AssistNotifier {
   /**
    * Heads-up guidance as soon as a new instruction is ready.
    * Cancel+repost so OEM grouping / prior silent updates do not swallow the alert.
+   *
+   * @param openAppOnTap when false (安全性チェック結果), tapping the notification
+   *   must not bring the Activity to the front — pause/resume/stop stay on the FGS.
    */
-  fun showGuidance(context: Context, title: String, body: String) {
+  fun showGuidance(
+    context: Context,
+    title: String,
+    body: String,
+    openAppOnTap: Boolean = true,
+  ) {
     ensureChannel(context)
     val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-    val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
-    val pending = if (launch != null) {
-      PendingIntent.getActivity(
-        context,
-        1,
-        launch,
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-      )
+    val pending = if (openAppOnTap) {
+      val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
+      if (launch != null) {
+        PendingIntent.getActivity(
+          context,
+          1,
+          launch,
+          PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+      } else {
+        null
+      }
     } else {
+      // Keep tap inert for safety results (no Activity reopen).
       null
     }
     val safeBody = AssistSecretRedactor.forPublicText(body)
-    val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+    val builder = NotificationCompat.Builder(context, CHANNEL_ID)
       .setContentTitle(title)
       .setContentText(safeBody)
       .setStyle(NotificationCompat.BigTextStyle().bigText(safeBody))
       .setSmallIcon(android.R.drawable.ic_menu_info_details)
-      .setContentIntent(pending)
       .setAutoCancel(true)
       .setOnlyAlertOnce(false)
       .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -126,10 +138,12 @@ object AssistNotifier {
         "終了",
         serviceActionPending(context, AssistForegroundService.ACTION_STOP, 13),
       )
-      .build()
+    if (pending != null) {
+      builder.setContentIntent(pending)
+    }
     // Force a fresh alert for this guidance id.
     manager.cancel(GUIDANCE_ID)
-    manager.notify(GUIDANCE_ID, notification)
+    manager.notify(GUIDANCE_ID, builder.build())
   }
 
   fun cancelGuidance(context: Context) {

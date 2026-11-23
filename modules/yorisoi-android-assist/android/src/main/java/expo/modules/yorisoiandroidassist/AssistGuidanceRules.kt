@@ -29,30 +29,14 @@ object AssistGuidanceRules {
     }
 
     if (featureId == "safetyCheck") {
-      val snippet = clipQuote(raw, 24)
-      val lookingPhone =
-        goal.contains("電話") || goal.contains("番号") || goal.contains("着信")
-      val lookingMail =
-        goal.contains("メール") || goal.contains("sms") || goal.contains("メッセージ")
-      return Step(
-        stepId = if (lookingMail) "safety-mail-review" else "safety-phone-review",
-        stageId = "safety",
-        displayText =
-          when {
-            lookingPhone -> "「$snippet」など、番号が見えたらアプリに戻って調べてください。"
-            lookingMail -> "「$snippet」など、メールの文が見えたらアプリに戻って調べてください。"
-            else -> "画面の「$snippet」を確認し、アプリに戻って調べてください。"
-          },
-        voiceText =
-          when {
-            lookingPhone ->
-              "画面には「$snippet」などとあります。番号を確認したら、よりそいAIに戻って調べてください。安全だと決めつけないでください。自動ではかけません。"
-            lookingMail ->
-              "画面には「$snippet」などとあります。メールの文を確認したら、よりそいAIに戻って調べてください。リンクはまだ押さないでください。安全だと決めつけないでください。"
-            else ->
-              "画面には「$snippet」などとあります。確認したらアプリに戻って調べてください。安全だと決めつけないでください。"
-          },
-      )
+      // Background MediaProjection path: detect phone/email and advise without
+      // asking the user to return to the Activity.
+      val mode = AssistSafetyInspector.resolveMode(goalSummary)
+      val finding = AssistSafetyInspector.inspect(mode, raw)
+      if (finding != null) {
+        return AssistSafetyInspector.toGuidanceStep(finding)
+      }
+      return AssistSafetyInspector.waitingStep(mode)
     }
     if (featureId == "textExplanation") {
       // Prefer dialog explain; else grounded OCR summary (demo).
