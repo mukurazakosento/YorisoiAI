@@ -13,6 +13,10 @@ import { baseFontSizes } from '../constants/typography';
 import { useSettings } from '../hooks/useSettings';
 import { classifyIntent, isOnDeviceAiReady } from '../services/onDeviceAi';
 import {
+  safetyModeSummary,
+  type SafetyInspectMode,
+} from '../services/security';
+import {
   abortSpeechRecognition,
   getSpeechRecognitionAvailability,
   startSpeechRecognition,
@@ -27,14 +31,15 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Consultation'>;
 type InputMethod = 'pick' | 'text' | 'voice';
 
 /**
- * 相談開始: 最初は「文字で入力」「音声で入力」の2択のみ。
- * 固定の大量選択肢は出さない。意図が明確なら支援へ、曖昧なら AiChoice。
+ * 相談開始: 操作支援／文章説明は「文字／音声」の2択。
+ * 安全性チェックは「電話／メール」を先に選び、そのあと支援へ。
  * 端末内 AI 未接続時は明示デモ判定。
  */
 export function ConsultationScreen({ navigation, route }: Props) {
   const { featureId, presetText } = route.params;
   const feature = getFeatureById(featureId);
   const { fontSize } = useSettings();
+  const isSafety = featureId === 'safetyCheck';
 
   const [method, setMethod] = useState<InputMethod>(() =>
     presetText?.trim() ? 'text' : 'pick',
@@ -106,6 +111,16 @@ export function ConsultationScreen({ navigation, route }: Props) {
     }
   };
 
+  const startSafetyMode = (mode: SafetyInspectMode) => {
+    if (busy) {
+      return;
+    }
+    navigateToSupportSession(navigation, {
+      featureId: 'safetyCheck',
+      summary: safetyModeSummary(mode),
+    });
+  };
+
   const canSubmit = inputText.trim().length > 0 && !busy;
   const demoHint = !isOnDeviceAiReady();
 
@@ -170,7 +185,41 @@ export function ConsultationScreen({ navigation, route }: Props) {
         </Text>
       ) : null}
 
-      {method === 'pick' ? (
+      {method === 'pick' && isSafety ? (
+        <>
+          <Text
+            style={[styles.lead, { fontSize: fontSize(baseFontSizes.title) }]}
+            numberOfLines={2}
+            accessibilityRole="header"
+          >
+            何を確認しますか？
+          </Text>
+          <Text
+            style={[
+              styles.safetyHint,
+              { fontSize: fontSize(baseFontSizes.caption) },
+            ]}
+            numberOfLines={2}
+          >
+            電話かメールを選んだあと、その画面の文字だけを調べます。勝手に他の画面は見ません。
+          </Text>
+          <View style={styles.methodActions}>
+            <PrimaryButton
+              label="電話"
+              onPress={() => startSafetyMode('phone')}
+              disabled={busy}
+            />
+            <PrimaryButton
+              label="メール"
+              variant="secondary"
+              onPress={() => startSafetyMode('email')}
+              disabled={busy}
+            />
+          </View>
+        </>
+      ) : null}
+
+      {method === 'pick' && !isSafety ? (
         <>
           <Text
             style={[styles.lead, { fontSize: fontSize(baseFontSizes.title) }]}
@@ -291,6 +340,10 @@ const styles = StyleSheet.create({
   demoHint: {
     color: colors.primary,
     fontWeight: '700',
+  },
+  safetyHint: {
+    color: colors.textSecondary,
+    lineHeight: 22,
   },
   methodActions: {
     flex: 1,

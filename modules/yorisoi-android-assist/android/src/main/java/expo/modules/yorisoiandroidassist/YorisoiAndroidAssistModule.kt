@@ -169,6 +169,65 @@ class YorisoiAndroidAssistModule : Module() {
       isOurAccessibilityEnabled(context)
     }
 
+    /**
+     * Arm one-shot safety screen read after the user chose phone / email.
+     * Does not start continuous capture or change always-on popup explain.
+     */
+    Function("armSafetyScreenRead") { mode: String ->
+      AssistSafetySession.arm(mode)
+      mapOf(
+        "ok" to AssistSafetySession.isArmed(),
+        "mode" to AssistSafetySession.currentMode(),
+      )
+    }
+
+    Function("disarmSafetyScreenRead") {
+      AssistSafetySession.disarm()
+      mapOf("ok" to true)
+    }
+
+    Function("isSafetyScreenReadArmed") {
+      AssistSafetySession.isArmed()
+    }
+
+    /**
+     * One-shot peek of active window text for armed safety mode.
+     * Prefers AccessibilityService; empty when not armed / not connected.
+     */
+    Function("peekSafetyScreenText") {
+      if (!AssistSafetySession.isArmed()) {
+        return@Function mapOf(
+          "text" to "",
+          "source" to "none",
+          "mode" to "",
+          "detail" to "安全性チェックの電話／メール選択後のみ読み取れます。",
+        )
+      }
+      if (!AssistDialogAccessibilityService.isServiceConnected()) {
+        return@Function mapOf(
+          "text" to "",
+          "source" to "none",
+          "mode" to AssistSafetySession.currentMode(),
+          "detail" to "AccessibilityService がオフのため、画面の文字をこちらでは取れません。スクショ読み取りをお使いください。",
+        )
+      }
+      val text = AssistDialogAccessibilityService.peekActiveWindowText().take(2000)
+      // Also stash briefly so FGS merge can see it if a session is somehow running.
+      if (text.length >= 4) {
+        AssistDialogTextHolder.publish(text)
+      }
+      mapOf(
+        "text" to text,
+        "source" to if (text.isNotBlank()) "accessibility" else "empty",
+        "mode" to AssistSafetySession.currentMode(),
+        "detail" to if (text.isNotBlank()) {
+          "画面の文字を読み取りました（画像は使いません）。"
+        } else {
+          "画面から文字を取れませんでした。"
+        },
+      )
+    }
+
     AsyncFunction("openDialogAccessibilitySettings") { promise: Promise ->
       val context = appContext.reactContext
       if (context == null) {

@@ -29,12 +29,27 @@ export function buildGuidanceFromOcrText(input: {
   }
 
   if (input.featureId === 'safetyCheck') {
+    // Continuous MP is not the default for safety; if somehow running, stay
+    // honest and never claim live AI. Prefer quoting visible labels only.
     const snippet = clipQuote(ocrRaw, 24);
+    const goal = normalize(input.goalSummary);
+    const lookingPhone =
+      goal.includes('電話') || goal.includes('番号') || goal.includes('着信');
+    const lookingMail =
+      goal.includes('メール') || goal.includes('sms') || goal.includes('メッセージ');
     return base({
-      stepId: 'safety-review',
+      stepId: lookingMail ? 'safety-mail-review' : 'safety-phone-review',
       stageId: 'safety',
-      displayText: `画面の「${snippet}」など、番号や文言をよく見てください。`,
-      voiceText: `画面には「${snippet}」などとあります。番号や文言をゆっくり確認してください。安全だと決めつけないでください。`,
+      displayText: lookingPhone
+        ? `「${snippet}」など、番号が見えたらアプリに戻って調べてください。`
+        : lookingMail
+          ? `「${snippet}」など、メールの文が見えたらアプリに戻って調べてください。`
+          : `画面の「${snippet}」を確認し、アプリに戻って調べてください。`,
+      voiceText: lookingPhone
+        ? `画面には「${snippet}」などとあります。番号を確認したら、よりそいAIに戻って「画面の文字を調べる」を押してください。安全だと決めつけないでください。自動ではかけません。`
+        : lookingMail
+          ? `画面には「${snippet}」などとあります。メールの文を確認したら、よりそいAIに戻って調べてください。リンクはまだ押さないでください。安全だと決めつけないでください。`
+          : `画面には「${snippet}」などとあります。確認したらアプリに戻って調べてください。安全だと決めつけないでください。`,
     });
   }
 

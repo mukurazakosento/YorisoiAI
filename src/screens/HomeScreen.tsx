@@ -10,8 +10,8 @@ import type { RootStackParamList } from '../types/navigation';
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
 /**
- * ホーム: 左「よりそいAI」／右設定／操作支援＋文章説明のみ。
- * 安全性チェックはコードに残しホーム非表示。フッターなし・スクロールなし。
+ * ホーム: 左「よりそいAI」／右設定／操作支援・文章説明・安全性チェック。
+ * フッターなし・スクロールなし。
  */
 export function HomeScreen({ navigation }: Props) {
   return (
