@@ -4,7 +4,9 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AppHeader } from '../components/AppHeader';
 import { PrimaryButton } from '../components/PrimaryButton';
+import { SafetyPhoneConsentPanel } from '../components/SafetyPhoneConsentPanel';
 import { Screen } from '../components/Screen';
+import { riskLevelLabel } from '../services/ai/schema';
 import { SessionCapturePanel } from '../components/SessionCapturePanel';
 import { colors } from '../constants/colors';
 import { getFeatureById } from '../constants/features';
@@ -20,6 +22,10 @@ import {
   subscribeAndroidAssistSession,
   type AndroidAssistSessionState,
 } from '../services/androidAssist';
+import {
+  armSafetyScreenRead,
+  disarmSafetyScreenRead,
+} from '../services/androidAssist/safetyScreenText';
 import {
   clearFrameDraft,
   confirmFrameText,
@@ -45,6 +51,11 @@ import {
   isOnDeviceAiReady,
 } from '../services/onDeviceAi';
 import {
+  extractPhoneCandidates,
+  resolveSafetyInspectMode,
+  type SafetyInspectResult,
+} from '../services/security';
+import {
   END_SUPPORT_DISPLAY,
   END_SUPPORT_VOICE,
 } from '../services/session/demoSteps';
@@ -63,16 +74,23 @@ import type {
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SupportSession'>;
 
+type SafetyUiPhase = 'none' | 'phone_consent' | 'result';
+
 /**
  * 支援セッション: start → guiding（一手ずつ）→ offer_end → EndSupport。
  * Phase D: 利用者開始のフレーム取り込み＋端末内 OCR（確認済み文字のみ案内へ）。
  * Android: 任意で MediaProjection 背面支援（同意済みのときのみ）。
+ * 安全性: 電話／メール選択後のみ画面文字を調べ、結果を通知＋TTS（＋短い画面表示）。
  * スクロール禁止。消音でも画面の displayText は必ず出す。
  */
 export function SupportSessionScreen({ navigation, route }: Props) {
   const { featureId, summary, backgroundAssist } = route.params;
   const feature = getFeatureById(featureId);
   const { fontSize, settings } = useSettings();
+  const isSafety = featureId === 'safetyCheck';
+  const safetyMode = isSafety
+    ? resolveSafetyInspectMode({ summary }) ?? 'phone'
+    : null;
 
   const [phase, setPhase] = useState<SupportSessionPhase>('starting');
   const [script, setScript] = useState<SessionScript | null>(null);
@@ -85,8 +103,15 @@ export function SupportSessionScreen({ navigation, route }: Props) {
     () => getAndroidAssistSessionState(),
   );
   const [guidanceBusy, setGuidanceBusy] = useState(false);
+  const [safetyUi, setSafetyUi] = useState<SafetyUiPhase>('none');
+  const [safetyResult, setSafetyResult] = useState<SafetyInspectResult | null>(
+    null,
+  );
+  const [consentPhone, setConsentPhone] = useState('');
+  const [pendingSafetyText, setPendingSafetyText] = useState('');
   const startedRef = useRef(false);
-  const wantsBackgroundAssist = backgroundAssist === true;
+  // 安全性は既定で連続 MediaProjection しない（navigateToSupport 側でも false）
+  const wantsBackgroundAssist = backgroundAssist === true && !isSafety;
 
   const step = script?.steps[stepIndex];
   const displayText =
@@ -111,6 +136,7 @@ export function SupportSessionScreen({ navigation, route }: Props) {
     void stopSpeaking().catch(() => {
       // no-op
     });
+    disarmSafetyScreenRead();
     void stopAndroidAssistSession();
     stopCaptureSession();
     void dismissSessionNotifications();
@@ -128,7 +154,7 @@ export function SupportSessionScreen({ navigation, route }: Props) {
   // 背面支援の OCR 変化 → 画面の一手を更新（ネイティブ通知/TTS と併用。デモ明示）
   useEffect(() => {
     const g = androidAssist.lastGuidance;
-    if (!g || phase !== 'guiding') {
+    if (!g || phase !== 'guiding' || isSafety) {
       return;
     }
     setScript({
@@ -146,7 +172,7 @@ export function SupportSessionScreen({ navigation, route }: Props) {
     });
     setStepIndex(0);
     setTone('normal');
-  }, [androidAssist.lastGuidance, phase]);
+  }, [androidAssist.lastGuidance, phase, isSafety]);
 
   // セッション開始: 端末内AI（未接続時はデモ）＋収録境界＋通知許可＋任意の背面支援
   useEffect(() => {
@@ -157,6 +183,9 @@ export function SupportSessionScreen({ navigation, route }: Props) {
 
     void (async () => {
       startCaptureSession(featureId);
+      if (safetyMode) {
+        armSafetyScreenRead(safetyMode);
+      }
       const guidance = await buildGuidanceScript({ featureId, summary });
       setScript(guidance.script);
 
@@ -181,11 +210,12 @@ export function SupportSessionScreen({ navigation, route }: Props) {
       void stopSpeaking().catch(() => {
         // no-op
       });
+      disarmSafetyScreenRead();
       void stopAndroidAssistSession();
       stopCaptureSession();
       void dismissSessionNotifications();
     };
-  }, [featureId, summary, wantsBackgroundAssist, settings.voiceEnabled]);
+  }, [featureId, summary, wantsBackgroundAssist, settings.voiceEnabled, safetyMode]);
 
   useEffect(() => {
     return addEndSupportResponseListener(() => {
@@ -193,9 +223,14 @@ export function SupportSessionScreen({ navigation, route }: Props) {
     });
   }, [goEndSupport]);
 
-  // 一手ごとに画面文言＋通知＋音声（OCR 確認中は抑止）
+  // 一手ごとに画面文言＋通知＋音声（OCR 確認中・同意 UI 中は抑止）
   useEffect(() => {
-    if (phase !== 'guiding' || !step || reviewingCapture) {
+    if (
+      phase !== 'guiding' ||
+      !step ||
+      reviewingCapture ||
+      safetyUi === 'phone_consent'
+    ) {
       return;
     }
 
@@ -224,6 +259,7 @@ export function SupportSessionScreen({ navigation, route }: Props) {
     settings.speechRate,
     step,
     reviewingCapture,
+    safetyUi,
   ]);
 
   useEffect(() => {
@@ -281,7 +317,31 @@ export function SupportSessionScreen({ navigation, route }: Props) {
   };
 
   const handleRequestFrame = () => {
-    void requestUserFrame();
+    void requestUserFrame({
+      preferAccessibilityText: isSafety,
+    });
+  };
+
+  const applySafetyRebuild = async (
+    confirmedText: string,
+    searchConsent: boolean,
+  ) => {
+    const rebuilt = await rebuildGuidanceFromConfirmedFrame({
+      featureId,
+      baseSummary: summary,
+      confirmedText,
+      searchConsent,
+    });
+    setScript(rebuilt.script);
+    setStepIndex(0);
+    setTone('normal');
+    setPhase('guiding');
+    if (rebuilt.safetyResult) {
+      setSafetyResult(rebuilt.safetyResult);
+      setSafetyUi('result');
+    } else {
+      setSafetyUi('none');
+    }
   };
 
   const handleConfirmDraft = () => {
@@ -296,19 +356,43 @@ export function SupportSessionScreen({ navigation, route }: Props) {
     setGuidanceBusy(true);
     void (async () => {
       try {
-        const rebuilt = await rebuildGuidanceFromConfirmedFrame({
-          featureId,
-          baseSummary: summary,
-          confirmedText: confirmed.text,
-        });
-        setScript(rebuilt.script);
-        setStepIndex(0);
-        setTone('normal');
-        setPhase('guiding');
+        if (isSafety && safetyMode === 'phone') {
+          const phones = extractPhoneCandidates(confirmed.text);
+          if (phones.length > 0) {
+            // まず端末内結果。公開情報は同意パネルから。
+            setPendingSafetyText(confirmed.text);
+            setConsentPhone(phones[0].display);
+            await applySafetyRebuild(confirmed.text, false);
+            setSafetyUi('phone_consent');
+            return;
+          }
+        }
+        await applySafetyRebuild(confirmed.text, false);
       } finally {
         setGuidanceBusy(false);
       }
     })();
+  };
+
+  const handlePhoneSearchConsent = () => {
+    if (guidanceBusy || !pendingSafetyText.trim()) {
+      return;
+    }
+    const textForSearch = consentPhone.trim()
+      ? `${consentPhone.trim()}\n${pendingSafetyText}`
+      : pendingSafetyText;
+    setGuidanceBusy(true);
+    void (async () => {
+      try {
+        await applySafetyRebuild(textForSearch, true);
+      } finally {
+        setGuidanceBusy(false);
+      }
+    })();
+  };
+
+  const handleSkipPhoneSearch = () => {
+    setSafetyUi(safetyResult ? 'result' : 'none');
   };
 
   const aiDemo = !isOnDeviceAiReady() || script?.isDemo !== false;
@@ -316,8 +400,14 @@ export function SupportSessionScreen({ navigation, route }: Props) {
     wantsBackgroundAssist &&
     (androidAssist.phase === 'running' || androidAssist.phase === 'paused');
   // 背面支援中は手動OCRパネルを隠し、一手だけに集中（確認中は表示）
+  // 安全性の同意／結果表示中はキャプチャパネルを隠して1画面に収める
   const showCapturePanel =
-    phase !== 'starting' && (!assistActive || reviewingCapture);
+    phase !== 'starting' &&
+    safetyUi === 'none' &&
+    (!assistActive || reviewingCapture);
+  const showSafetyConsent = safetyUi === 'phone_consent';
+  const showSafetyResultBadge =
+    safetyUi === 'result' && safetyResult != null && !showSafetyConsent;
 
   const nextLabel =
     phase === 'offer_end'
@@ -328,7 +418,7 @@ export function SupportSessionScreen({ navigation, route }: Props) {
 
   const footer = (
     <View style={styles.footerInner}>
-      {phase === 'guiding' && !reviewingCapture ? (
+      {phase === 'guiding' && !reviewingCapture && !showSafetyConsent ? (
         <>
           <PrimaryButton
             label="できた"
@@ -458,14 +548,39 @@ export function SupportSessionScreen({ navigation, route }: Props) {
         />
       ) : null}
 
-      {!reviewingCapture ? (
+      {showSafetyConsent ? (
+        <SafetyPhoneConsentPanel
+          phoneNumber={consentPhone}
+          onChangePhoneNumber={setConsentPhone}
+          busy={guidanceBusy}
+          onSearch={handlePhoneSearchConsent}
+          onCancel={handleSkipPhoneSearch}
+        />
+      ) : null}
+
+      {!reviewingCapture && !showSafetyConsent ? (
         <View style={styles.instructionBlock}>
-          <Text
-            style={[styles.nextEyebrow, { fontSize: fontSize(baseFontSizes.caption) }]}
-            numberOfLines={1}
-          >
-            次にすること
-          </Text>
+          {showSafetyResultBadge && safetyResult ? (
+            <Text
+              style={[
+                styles.safetyBadge,
+                { fontSize: fontSize(baseFontSizes.body) },
+              ]}
+              numberOfLines={1}
+            >
+              {riskLevelLabel(safetyResult.riskLevel ?? 'insufficient_info')}
+              {safetyResult.mode === 'demo' || safetyResult.mode === 'offline'
+                ? `（${safetyResult.mode === 'demo' ? 'デモ' : 'AI未接続'}）`
+                : ''}
+            </Text>
+          ) : (
+            <Text
+              style={[styles.nextEyebrow, { fontSize: fontSize(baseFontSizes.caption) }]}
+              numberOfLines={1}
+            >
+              次にすること
+            </Text>
+          )}
           <Text
             style={[
               styles.displayText,
@@ -525,6 +640,11 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: '700',
     letterSpacing: 0.5,
+  },
+  safetyBadge: {
+    color: colors.warning,
+    fontWeight: '700',
+    lineHeight: 28,
   },
   displayText: {
     color: colors.text,

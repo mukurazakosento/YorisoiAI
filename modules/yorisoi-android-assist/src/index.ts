@@ -130,6 +130,84 @@ export async function openAndroidDialogAccessibilitySettings(): Promise<void> {
   await native.openDialogAccessibilitySettings();
 }
 
+/**
+ * Arm one-shot safety screen text read (phone | email).
+ * No-op on iOS / Web / when native helpers are missing.
+ */
+export function armSafetyScreenRead(mode: 'phone' | 'email'): boolean {
+  const native = getNativeAndroidAssistModule();
+  if (!native?.armSafetyScreenRead) {
+    return false;
+  }
+  try {
+    const result = native.armSafetyScreenRead(mode);
+    return Boolean(result?.ok);
+  } catch {
+    return false;
+  }
+}
+
+export function disarmSafetyScreenRead(): void {
+  const native = getNativeAndroidAssistModule();
+  if (!native?.disarmSafetyScreenRead) {
+    return;
+  }
+  try {
+    native.disarmSafetyScreenRead();
+  } catch {
+    // no-op
+  }
+}
+
+export function isSafetyScreenReadArmed(): boolean {
+  const native = getNativeAndroidAssistModule();
+  if (!native?.isSafetyScreenReadArmed) {
+    return false;
+  }
+  try {
+    return Boolean(native.isSafetyScreenReadArmed());
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * One-shot peek of active window text when safety mode is armed.
+ * Prefers AccessibilityService; never auto-dials or auto-sends mail.
+ */
+export function peekSafetyScreenText(): {
+  text: string;
+  source: string;
+  mode: string;
+  detail: string;
+} {
+  const native = getNativeAndroidAssistModule();
+  if (!native?.peekSafetyScreenText) {
+    return {
+      text: '',
+      source: 'none',
+      mode: '',
+      detail: 'この端末では画面文字の直接読み取りが使えません。',
+    };
+  }
+  try {
+    const result = native.peekSafetyScreenText();
+    return {
+      text: (result?.text ?? '').trim(),
+      source: result?.source ?? 'none',
+      mode: result?.mode ?? '',
+      detail: result?.detail ?? '',
+    };
+  } catch {
+    return {
+      text: '',
+      source: 'none',
+      mode: '',
+      detail: '画面の文字を読めませんでした。',
+    };
+  }
+}
+
 export function subscribeAndroidAssistPhase(
   listener: (event: AndroidAssistPhaseEvent) => void,
 ): () => void {

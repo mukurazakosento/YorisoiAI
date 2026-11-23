@@ -163,10 +163,10 @@ const featuresUrl = pathToFileURL(
 ).href;
 const { FEATURES, HOME_FEATURES } = await import(featuresUrl);
 assert.equal(FEATURES.length, 3);
-assert.equal(HOME_FEATURES.length, 2);
+assert.equal(HOME_FEATURES.length, 3);
 assert.deepEqual(
   HOME_FEATURES.map((f) => f.id),
-  ['operationSupport', 'textExplanation'],
+  ['operationSupport', 'textExplanation', 'safetyCheck'],
 );
 assert.ok(FEATURES.some((f) => f.id === 'safetyCheck'));
 

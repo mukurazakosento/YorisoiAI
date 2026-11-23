@@ -40,6 +40,7 @@ export {
 } from './featurePaths';
 
 export {
+  applyScreenTextDraft,
   clearFrameDraft,
   confirmFrameText,
   getCaptureSessionState,
@@ -56,4 +57,5 @@ export {
 export {
   buildSummaryWithConfirmedFrame,
   rebuildGuidanceFromConfirmedFrame,
+  type RebuildGuidanceResult,
 } from './guidanceFromFrame';

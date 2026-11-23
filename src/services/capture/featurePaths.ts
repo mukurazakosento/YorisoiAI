@@ -10,7 +10,7 @@ const PATHS: Record<FeatureId, FeatureCapturePath> = {
   },
   safetyCheck: {
     featureId: 'safetyCheck',
-    hint: '電話・メールを開いたあと、見えている文字を確認してから調べます。',
+    hint: '電話かメールを開いたあと、「画面の文字を調べる」で番号や文だけを確認します（勝手に他の画面は見ません）。',
     readButtonLabel: '画面の文字を調べる',
     confirmedPrefix: '確認した画面の文字',
   },

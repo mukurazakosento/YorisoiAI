@@ -1,9 +1,11 @@
 import type { AiResponse } from '../../types/ai';
 import {
+  detectScamPatterns,
   extractPhoneCandidates,
+  extractUrls,
   normalizePhoneDigits,
-} from '../security/phone';
-import { extractUrls } from '../security/urls';
+  scamPatternLabels,
+} from '../security';
 import type { ConsultHistoryTurn, SafetyAction } from './types';
 
 const DEMO_PREFIX = '【デモ・AI未接続】';
@@ -171,6 +173,7 @@ function buildMessageAnalyzeDemo(input: SafetyDemoInput): AiResponse {
   const text = input.text.trim();
   const urls = extractUrls(text);
   const scamHits = detectScamPatterns(text);
+  const labels = scamPatternLabels(scamHits);
 
   const urlChecks = urls.map((url) => ({
     url,
@@ -188,7 +191,7 @@ function buildMessageAnalyzeDemo(input: SafetyDemoInput): AiResponse {
       displayText: '危険な特徴が見つかりました',
       voiceText:
         '急かす表現やお金・個人情報の要求など、危険な特徴が見つかりました。リンクは開かず、返信しないでください。',
-      rationale: `デモ分析で検知: ${scamHits.join('、')}`,
+      rationale: `デモ分析で検知: ${labels.join('、')}`,
       recommendedActions: [
         'URLを開かない',
         '相手に返信しない',
@@ -211,8 +214,8 @@ function buildMessageAnalyzeDemo(input: SafetyDemoInput): AiResponse {
       voiceText:
         '気になる点があります。リンクを開いたり個人情報を送ったりする前に、落ち着いて公式の案内と見比べてください。',
       rationale:
-        scamHits.length > 0
-          ? `デモ分析で検知: ${scamHits.join('、')}`
+        labels.length > 0
+          ? `デモ分析で検知: ${labels.join('、')}`
           : 'リンクが含まれています。',
       recommendedActions: [
         '不審なURLを開かない',
@@ -242,27 +245,6 @@ function buildMessageAnalyzeDemo(input: SafetyDemoInput): AiResponse {
     urlChecks,
     choices: ['別の文章を確認する', '最初の選択肢に戻る'],
   };
-}
-
-function detectScamPatterns(text: string): string[] {
-  const n = text.replace(/\s+/g, '');
-  const hits: string[] = [];
-  if (/至急|すぐに|今すぐ|期限|残り\d|放置/u.test(n)) {
-    hits.push('不自然に急がせる表現');
-  }
-  if (/未払い|支払い|料金|請求|振込|振り込み|口座/u.test(n)) {
-    hits.push('料金・振込の要求');
-  }
-  if (/アカウント.*停止|停止.*アカウント|凍結|利用停止/u.test(n)) {
-    hits.push('アカウント停止を口実にした誘導');
-  }
-  if (/パスワード|暗証番号|認証コード|個人情報|マイナンバー/u.test(n)) {
-    hits.push('個人情報や暗証の要求');
-  }
-  if (/http|www\.|bit\.ly|クリック/i.test(text)) {
-    hits.push('リンクへの誘導');
-  }
-  return hits;
 }
 
 function isPhoneChoice(

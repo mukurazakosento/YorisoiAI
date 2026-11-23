@@ -55,12 +55,24 @@ export type AndroidAssistErrorEvent = {
   message: string;
 };
 
+export type SafetyScreenPeekResult = {
+  text: string;
+  source: string;
+  mode?: string;
+  detail?: string;
+};
+
 export type YorisoiAndroidAssistNativeModule = {
   isSupported(): boolean;
   getStatus(): AndroidAssistNativeStatus;
   /** Optional AccessibilityService enabled for system permission dialog text. */
   isDialogAccessibilityEnabled?: () => boolean;
   openDialogAccessibilitySettings?: () => Promise<{ ok: boolean }>;
+  /** Arm one-shot safety read after user chose phone / email. */
+  armSafetyScreenRead?: (mode: string) => { ok: boolean; mode: string };
+  disarmSafetyScreenRead?: () => { ok: boolean };
+  isSafetyScreenReadArmed?: () => boolean;
+  peekSafetyScreenText?: () => SafetyScreenPeekResult;
   requestPermission(): Promise<AndroidAssistPermissionResult>;
   startAssist(options: AndroidAssistStartOptions): Promise<{ ok: boolean; alreadyRunning?: boolean }>;
   pauseAssist(): Promise<{ ok: boolean }>;

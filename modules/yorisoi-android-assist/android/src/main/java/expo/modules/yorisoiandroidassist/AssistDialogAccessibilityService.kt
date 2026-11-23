@@ -29,6 +29,7 @@ class AssistDialogAccessibilityService : AccessibilityService() {
 
   override fun onServiceConnected() {
     super.onServiceConnected()
+    instance = this
     if (tts == null) {
       tts = AssistTtsHelper(this)
     }
@@ -123,8 +124,29 @@ class AssistDialogAccessibilityService : AccessibilityService() {
     debounceRunnable = null
     tts?.shutdown()
     tts = null
+    if (instance === this) {
+      instance = null
+    }
     AssistDialogTextHolder.clear()
     super.onDestroy()
+  }
+
+  /**
+   * One-shot text from the active window. Only for user-armed safety reads.
+   * Does not announce, notify, or auto-tap.
+   */
+  fun collectActiveWindowText(): String {
+    val root = rootInActiveWindow ?: return ""
+    try {
+      val collected = StringBuilder()
+      collectText(root, collected, depth = 0)
+      return collected.toString().replace("\\s+".toRegex(), " ").trim()
+    } finally {
+      try {
+        root.recycle()
+      } catch (_: Exception) {
+      }
+    }
   }
 
   /**
@@ -202,5 +224,20 @@ class AssistDialogAccessibilityService : AccessibilityService() {
   companion object {
     private const val DEBOUNCE_MS = 600L
     private const val DEDUPE_MS = 45_000L
+
+    @Volatile
+    private var instance: AssistDialogAccessibilityService? = null
+
+    /**
+     * Peek active window text when the service is connected.
+     * Callers must gate with [AssistSafetySession.isArmed].
+     */
+    fun peekActiveWindowText(): String {
+      return instance?.collectActiveWindowText().orEmpty()
+    }
+
+    fun isServiceConnected(): Boolean {
+      return instance != null
+    }
   }
 }

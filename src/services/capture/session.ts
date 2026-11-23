@@ -121,16 +121,72 @@ export function stopCaptureSession(): void {
 }
 
 /**
+ * 利用者が確認した文字をドラフトとして載せる（a11y ワンショット等）。
+ * 画像は扱わない。案内へは confirm まで渡さない。
+ */
+export function applyScreenTextDraft(
+  text: string,
+  statusMessage?: string,
+): CaptureSessionState {
+  const trimmed = text.trim();
+  if (!state.featureId) {
+    return getCaptureSessionState();
+  }
+  setState({
+    phase: 'review',
+    draft: { text: trimmed },
+    statusMessage:
+      statusMessage ??
+      '読み取った文字を確認・直してから「この文字で進む」を押してください。画像は送りません。',
+    framePromptCount: state.framePromptCount + 1,
+  });
+  return getCaptureSessionState();
+}
+
+/**
  * 利用者が明示的にフレームを取り込む。サイレント取得はしない。
+ * 安全性チェックでは AccessibilityService を優先し、取れなければ
  * ImagePicker → 端末内 OCR。画像は OCR 後に削除（ocr サービス側）。
  */
-export async function requestUserFrame(): Promise<CaptureSessionState> {
+export async function requestUserFrame(options?: {
+  preferAccessibilityText?: boolean;
+}): Promise<CaptureSessionState> {
   const availability = getCaptureAvailability();
-  if (!availability.manualFrameAvailable || !state.featureId) {
+  if (!state.featureId) {
     setState({
       phase: 'unavailable',
       availability,
       statusMessage: availability.message,
+    });
+    return getCaptureSessionState();
+  }
+
+  if (options?.preferAccessibilityText) {
+    try {
+      const { peekSafetyScreenText } = await import(
+        '../androidAssist/safetyScreenText'
+      );
+      const peeked = peekSafetyScreenText();
+      if (peeked.text.length >= 4) {
+        return applyScreenTextDraft(
+          peeked.text,
+          peeked.detail ||
+            '画面の文字を読み取りました。確認・直してから進んでください（画像は使いません）。',
+        );
+      }
+    } catch {
+      // OCR へフォールバック
+    }
+  }
+
+  if (!availability.manualFrameAvailable) {
+    setState({
+      phase: 'unavailable',
+      availability,
+      statusMessage:
+        options?.preferAccessibilityText
+          ? '画面の文字を直接読めず、スクショ読み取りもこの環境では使えません。'
+          : availability.message,
     });
     return getCaptureSessionState();
   }

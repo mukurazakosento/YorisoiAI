@@ -1,5 +1,5 @@
 /**
- * Phase 6 文章解説・安全性検査スモーク。
+ * Phase 6 文章解説・安全性検査スモーク（電話／メール再有効化対応）。
  * 使い方: npm run smoke:safety
  */
 import assert from 'node:assert/strict';
@@ -15,15 +15,32 @@ function read(rel) {
 }
 
 // --- Source guardrails ---
-const screen = read('src/screens/ConsultationScreen.tsx');
-assert.match(screen, /ExplanationResultPanel/);
-assert.match(screen, /SafetyResultPanel/);
-assert.match(screen, /SafetyPhoneConsentPanel/);
-assert.match(screen, /searchConsent:\s*true/);
-assert.match(screen, /buildPhoneSearchPayload/);
-assert.match(screen, /assembleConsultationSendText/);
-assert.doesNotMatch(screen, /layoutHints/);
-assert.doesNotMatch(screen, /imageBase64|screenshotBytes|GEMINI_API_KEY|WEBRISK/);
+const consultation = read('src/screens/ConsultationScreen.tsx');
+assert.match(consultation, /何を確認しますか？/);
+assert.match(consultation, /label="電話"/);
+assert.match(consultation, /label="メール"/);
+assert.match(consultation, /startSafetyMode\('phone'\)/);
+assert.match(consultation, /startSafetyMode\('email'\)/);
+assert.match(consultation, /勝手に他の画面は見ません/);
+assert.doesNotMatch(consultation, /layoutHints/);
+assert.doesNotMatch(consultation, /imageBase64|screenshotBytes|GEMINI_API_KEY|WEBRISK/);
+
+const support = read('src/screens/SupportSessionScreen.tsx');
+assert.match(support, /SafetyPhoneConsentPanel/);
+assert.match(support, /armSafetyScreenRead/);
+assert.match(support, /disarmSafetyScreenRead/);
+assert.match(support, /preferAccessibilityText:\s*isSafety/);
+assert.match(support, /searchConsent/);
+assert.doesNotMatch(support, /Linking\.openURL\(['\"]tel:/);
+assert.doesNotMatch(support, /mailto:/);
+
+const features = read('src/constants/features.ts');
+assert.match(features, /HOME_FEATURES:\s*FeatureDefinition\[\]\s*=\s*FEATURES/);
+assert.match(features, /id: 'safetyCheck'/);
+
+const navigate = read('src/utils/navigateToSupport.ts');
+assert.match(navigate, /featureId === 'safetyCheck'/);
+assert.match(navigate, /backgroundAssist:\s*false/);
 
 const explanationPanel = read('src/components/ExplanationResultPanel.tsx');
 assert.match(explanationPanel, /表示された文章/);
@@ -49,7 +66,28 @@ assert.match(phoneConsent, /番号だけ/);
 
 const securityIndex = read('src/services/security/index.ts');
 assert.match(securityIndex, /extractPhoneCandidates/);
+assert.match(securityIndex, /extractEmailCandidates/);
+assert.match(securityIndex, /inspectSafetyText/);
+assert.match(securityIndex, /lookupPhoneNumberViaLegacyCloud/);
 assert.match(securityIndex, /Cloud Functions/);
+
+const inspectSrc = read('src/services/security/inspectSafety.ts');
+assert.doesNotMatch(inspectSrc, /(?<!とは言いません。*)これは安全です/);
+assert.match(inspectSrc, /安全です」とは言いません|「安全です」とは言いません|安全とは言いません/);
+
+const a11yNative = read(
+  'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/YorisoiAndroidAssistModule.kt',
+);
+assert.match(a11yNative, /armSafetyScreenRead/);
+assert.match(a11yNative, /peekSafetyScreenText/);
+assert.match(a11yNative, /AssistSafetySession/);
+
+const safetySessionKt = read(
+  'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistSafetySession.kt',
+);
+assert.match(safetySessionKt, /one-shot|One-shot|arms a one-shot/i);
+assert.match(safetySessionKt, /phone/);
+assert.match(safetySessionKt, /email/);
 
 const consultFn = read('functions/src/ai/consult.ts');
 assert.match(consultFn, /googleSearch/);
@@ -93,6 +131,9 @@ const demoUrl = pathToFileURL(
 const schemaUrl = pathToFileURL(
   path.join(root, 'src/services/ai/schema.ts'),
 ).href;
+const securityUrl = pathToFileURL(
+  path.join(root, 'src/services/security/index.ts'),
+).href;
 const phoneUrl = pathToFileURL(
   path.join(root, 'src/services/security/phone.ts'),
 ).href;
@@ -127,6 +168,14 @@ const {
 const { extractPhoneCandidates, buildPhoneSearchPayload } =
   await import(phoneUrl);
 const { extractUrls } = await import(urlsUrl);
+const {
+  extractEmailCandidates,
+  inspectSafetyText,
+  resolveSafetyInspectMode,
+  safetyModeSummary,
+  classifyJapanesePhoneNumber,
+  detectScamPatterns,
+} = await import(securityUrl);
 const { assembleConsultationSendText, consultationPayloadLooksSafe } =
   await import(consultationTextUrl);
 const { resolveConnectionFromMode } = await import(connectionUrl);
@@ -311,5 +360,46 @@ assert.ok(
 const sendText = assembleConsultationSendText('許可しますか？');
 assert.equal(sendText, '許可しますか？');
 assert.equal(consultationPayloadLooksSafe(sendText), true);
+
+// 15) 電話／メールモードと端末内検査
+assert.equal(resolveSafetyInspectMode({ summary: '電話番号を確認したい' }), 'phone');
+assert.equal(resolveSafetyInspectMode({ summary: 'メールの内容を確認したい' }), 'email');
+assert.equal(safetyModeSummary('phone'), '電話番号を確認したい');
+
+const mobile = classifyJapanesePhoneNumber('090-1234-5678');
+assert.equal(mobile.kind, 'mobile');
+
+const emails = extractEmailCandidates('差出人 scam@example.com です');
+assert.equal(emails.length, 1);
+
+const phoneInspect = inspectSafetyText({
+  mode: 'phone',
+  text: '着信 090-1234-5678',
+  searchConsent: false,
+});
+assert.equal(phoneInspect.status, 'safety_result');
+assert.equal(phoneInspect.riskLevel, 'insufficient_info');
+assert.equal(phoneInspect.mode, 'demo');
+assert.ok(phoneInspect.detectedPhones.length >= 1);
+assert.doesNotMatch(phoneInspect.message ?? '', /(?<!とは言いません|言いません。)安全です(?!」とは)/);
+
+const mailInspect = inspectSafetyText({
+  mode: 'email',
+  text: '至急！未払い料金があります。http://bit.ly/evil で認証コードを入力',
+});
+assert.equal(mailInspect.status, 'safety_result');
+assert.equal(mailInspect.riskLevel, 'dangerous');
+assert.ok(
+  detectScamPatterns(
+    '至急！未払い料金があります。http://bit.ly/evil で認証コードを入力',
+  ).length >= 2,
+);
+
+const homeFeaturesUrl = pathToFileURL(
+  path.join(root, 'src/constants/features.ts'),
+).href;
+const { HOME_FEATURES } = await import(homeFeaturesUrl);
+assert.equal(HOME_FEATURES.length, 3);
+assert.ok(HOME_FEATURES.some((f) => f.id === 'safetyCheck'));
 
 console.log('smoke-safety-phase6: OK');

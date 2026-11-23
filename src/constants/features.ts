@@ -8,7 +8,7 @@ export type FeatureDefinition = {
 
 /**
  * 全機能定義（コード・ナビ・スモーク用）。
- * ホーム表示は HOME_FEATURES（安全性チェックは非表示・削除しない）。
+ * ホーム表示は HOME_FEATURES（最終仕様どおり3機能）。
  */
 export const FEATURES: FeatureDefinition[] = [
   {
@@ -28,10 +28,8 @@ export const FEATURES: FeatureDefinition[] = [
   },
 ];
 
-/** ホームに出す機能のみ（操作支援＋文章説明）。 */
-export const HOME_FEATURES: FeatureDefinition[] = FEATURES.filter(
-  (f) => f.id !== 'safetyCheck',
-);
+/** ホームに出す機能（操作支援＋文章説明＋安全性チェック）。 */
+export const HOME_FEATURES: FeatureDefinition[] = FEATURES;
 
 export function getFeatureById(id: FeatureId): FeatureDefinition {
   const feature = FEATURES.find((item) => item.id === id);
