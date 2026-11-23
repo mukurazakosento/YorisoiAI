@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Session-scoped dialog text only (no auto-tap).
-  Used when MediaProjection OCR cannot see system permission sheets
-  (Android 14+ app-share excludes system UI; some OEMs blank protected overlays).
+  Always-on permission/confirm dialog text reader (no auto-tap).
+  Primary path for 文章説明 of system sheets when MediaProjection cannot see them.
 -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
   android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged"

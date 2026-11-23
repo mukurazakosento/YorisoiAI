@@ -52,7 +52,37 @@ const a11yService = read(
   'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistDialogAccessibilityService.kt',
 );
 assert.match(a11yService, /AssistDialogTextHolder/);
+assert.match(a11yService, /AssistNotifier\.showGuidance/);
+assert.match(a11yService, /speakLatest|AssistTtsHelper/);
+assert.match(a11yService, /AssistPopupExplainer\.explain/);
+assert.match(a11yService, /isExplainWorthyDialog/);
+// Always-on: must NOT gate on sessionActive / MediaProjection at runtime.
+assert.doesNotMatch(
+  a11yService,
+  /!AssistDialogTextHolder\.sessionActive|if\s*\(\s*event\s*==\s*null\s*\|\|\s*!.*sessionActive/,
+);
 assert.doesNotMatch(a11yService, /dispatchGesture|performGlobalAction|ACTION_CLICK/);
+// Do not mass-allow SystemUI by package alone.
+assert.doesNotMatch(
+  a11yService,
+  /pkg\s*==\s*"com\.android\.systemui"|pkg\.equals\("com\.android\.systemui"\)/,
+);
+
+const holder = read(
+  'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistDialogTextHolder.kt',
+);
+assert.match(holder, /fun publish/);
+// publish must not require sessionActive
+assert.doesNotMatch(holder, /fun publish[\s\S]*if\s*\(\s*!sessionActive/);
+
+const manifest = read(
+  'modules/yorisoi-android-assist/android/src/main/AndroidManifest.xml',
+);
+assert.match(
+  manifest,
+  /AssistDialogAccessibilityService[\s\S]*android:exported="true"/,
+);
+assert.match(manifest, /BIND_ACCESSIBILITY_SERVICE/);
 
 const moduleKt = read(
   'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/YorisoiAndroidAssistModule.kt',
@@ -64,6 +94,9 @@ const fgs = read(
   'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistForegroundService.kt',
 );
 assert.match(fgs, /pickBestDialogText|AssistDialogTextHolder/);
+
+const settingsUi = read('src/screens/SettingsScreen.tsx');
+assert.match(settingsUi, /ポップアップ自動解説|openAndroidDialogAccessibilitySettings/);
 
 const explainer = read(
   'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistPopupExplainer.kt',

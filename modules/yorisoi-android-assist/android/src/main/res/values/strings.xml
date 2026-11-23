@@ -1,4 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-  <string name="yorisoi_assist_accessibility_description">よりそいAIが支援中だけ、許可ダイアログなど画面上の文字を読み取って説明します。代わりにボタンを押すことはありません。支援を終えると読み取りも止めます。</string>
+  <string name="yorisoi_assist_accessibility_description">よりそいAIが、他のアプリに出た許可・確認の画面の文字だけを読み、通知と音声で説明します。アプリを開いていなくても動きます。代わりにボタンを押すことはありません。オフにすると自動解説を止めます。</string>
 </resources>

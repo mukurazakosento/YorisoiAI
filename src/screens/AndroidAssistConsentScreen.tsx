@@ -82,8 +82,8 @@ export function AndroidAssistConsentScreen({ navigation, route }: Props) {
             numberOfLines={3}
           >
             {a11yOn
-              ? '位置情報などのシステム許可ダイアログも読み取りできます（支援中のみ・自動タップなし）。'
-              : '位置情報などのシステム許可が読めないときは、設定で「よりそいAI」の読み取りをオンにできます（任意・支援中のみ）。'}
+              ? 'ポップアップ自動解説はオンです。アプリを閉じても許可画面を通知と音声で説明します（自動タップなし）。'
+              : '位置情報などの許可画面は、設定で「ポップアップ自動解説」を一度オンにすると、アプリを閉じても説明できます。'}
           </Text>
         ) : null}
         <Text
@@ -106,7 +106,7 @@ export function AndroidAssistConsentScreen({ navigation, route }: Props) {
         <PrimaryButton label="画面共有して続ける" onPress={goWithAssist} />
         {wantsTextExplain && !a11yOn ? (
           <PrimaryButton
-            label="許可ダイアログ読み取りを設定"
+            label="ポップアップ自動解説を設定"
             variant="secondary"
             onPress={() => {
               void openAndroidDialogAccessibilitySettings().catch(() => {

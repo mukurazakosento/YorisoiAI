@@ -1,17 +1,41 @@
 package expo.modules.yorisoiandroidassist
 
 import android.accessibilityservice.AccessibilityService
+import android.os.Handler
+import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 
 /**
- * Optional dialog-text reader for system permission sheets.
- * Active only while [AssistDialogTextHolder.sessionActive] (user-started assist).
- * Never clicks / gestures. Not silent monitoring outside a session.
+ * Always-on dialog explainer (primary path for 文章説明 of system permission sheets).
+ *
+ * When the user enables this service in Android Settings, it keeps running with the
+ * YorisoiAI Activity closed. On permission/confirm dialogs it reads text, explains
+ * via notify + TTS, and never auto-taps. Does **not** require MediaProjection or
+ * [AssistDialogTextHolder.sessionActive].
  */
 class AssistDialogAccessibilityService : AccessibilityService() {
+  private val mainHandler = Handler(Looper.getMainLooper())
+  private var tts: AssistTtsHelper? = null
+
+  @Volatile
+  private var lastAnnouncedFingerprint: String? = null
+
+  @Volatile
+  private var lastAnnounceAtMs: Long = 0L
+
+  @Volatile
+  private var debounceRunnable: Runnable? = null
+
+  override fun onServiceConnected() {
+    super.onServiceConnected()
+    if (tts == null) {
+      tts = AssistTtsHelper(this)
+    }
+  }
+
   override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-    if (event == null || !AssistDialogTextHolder.sessionActive) {
+    if (event == null) {
       return
     }
     if (
@@ -22,7 +46,23 @@ class AssistDialogAccessibilityService : AccessibilityService() {
     }
 
     val pkg = event.packageName?.toString().orEmpty()
-    val root = rootInActiveWindow ?: event.source ?: return
+    // Never explain our own UI; never treat bare SystemUI as dialog without cues.
+    if (pkg == packageName) {
+      return
+    }
+
+    // Debounce rapid content-change spam from the same window.
+    debounceRunnable?.let { mainHandler.removeCallbacks(it) }
+    val pending =
+      Runnable {
+        processWindow(pkg)
+      }
+    debounceRunnable = pending
+    mainHandler.postDelayed(pending, DEBOUNCE_MS)
+  }
+
+  private fun processWindow(pkg: String) {
+    val root = rootInActiveWindow ?: return
     try {
       val collected = StringBuilder()
       collectText(root, collected, depth = 0)
@@ -30,16 +70,42 @@ class AssistDialogAccessibilityService : AccessibilityService() {
       if (text.length < 4) {
         return
       }
-      // Prefer permission-controller / dialog-like trees; still accept if detector would match.
-      val likelySystemPermission =
-        pkg.contains("permissioncontroller", ignoreCase = true) ||
-          pkg.contains("android.permission", ignoreCase = true) ||
-          pkg == "com.android.systemui" ||
-          AssistPopupDetector.detect(text) != null ||
-          looksLikePermissionUi(text)
-      if (likelySystemPermission) {
-        AssistDialogTextHolder.publish(text)
+
+      if (!isExplainWorthyDialog(pkg, text)) {
+        return
       }
+
+      val detection = AssistPopupDetector.detect(text) ?: return
+
+      // Also publish for MediaProjection FGS merge when an ops/text session is running.
+      AssistDialogTextHolder.publish(text)
+
+      val now = System.currentTimeMillis()
+      if (detection.fingerprint == lastAnnouncedFingerprint &&
+        now - lastAnnounceAtMs < DEDUPE_MS
+      ) {
+        return
+      }
+
+      val step = AssistPopupExplainer.explain(detection)
+      val safeDisplay = AssistSecretRedactor.forPublicText(step.displayText)
+      val safeVoice = AssistSecretRedactor.forVoice(step.voiceText)
+
+      lastAnnouncedFingerprint = detection.fingerprint
+      lastAnnounceAtMs = now
+
+      // Notify + TTS without bringing the Activity to the front.
+      AssistNotifier.showGuidance(this, "よりそいAI", safeDisplay)
+      tts?.speakLatest(safeVoice)
+
+      YorisoiAndroidAssistModule.emitOcrChanged(
+        text = text.take(800),
+        displayText = safeDisplay,
+        voiceText = safeVoice,
+        mode = step.mode,
+        stepId = step.stepId,
+        stageId = step.stageId,
+      )
     } finally {
       try {
         root.recycle()
@@ -49,23 +115,62 @@ class AssistDialogAccessibilityService : AccessibilityService() {
   }
 
   override fun onInterrupt() {
-    // no-op
+    tts?.stop()
   }
 
-  override fun onServiceConnected() {
-    super.onServiceConnected()
+  override fun onDestroy() {
+    debounceRunnable?.let { mainHandler.removeCallbacks(it) }
+    debounceRunnable = null
+    tts?.shutdown()
+    tts = null
+    AssistDialogTextHolder.clear()
+    super.onDestroy()
   }
 
-  private fun looksLikePermissionUi(text: String): Boolean {
+  /**
+   * Only permission / consent / update dialogs — not home, notifications, or generic screens.
+   * Do not accept com.android.systemui solely by package name.
+   */
+  private fun isExplainWorthyDialog(pkg: String, text: String): Boolean {
     val n = text.lowercase().replace("\\s+".toRegex(), "")
-    return n.contains("位置") ||
+    // Skip notification / QS style noise when no permission cues.
+    if (looksLikeNotificationShade(n) && !hasPermissionCue(n)) {
+      return false
+    }
+    // Detector match is the primary gate (structure + topic + buttons).
+    if (AssistPopupDetector.detect(text) != null) {
+      return true
+    }
+    // PermissionController package with strong topic still counts if OCR-like text is thin.
+    val permissionPkg =
+      pkg.contains("permissioncontroller", ignoreCase = true) ||
+        pkg.contains("android.permission", ignoreCase = true)
+    return permissionPkg && hasPermissionCue(n)
+  }
+
+  private fun hasPermissionCue(n: String): Boolean {
+    return n.contains("許可") ||
+      n.contains("アクセス") ||
+      n.contains("位置") ||
       n.contains("カメラ") ||
       n.contains("マイク") ||
       n.contains("通知") ||
-      n.contains("許可しない") ||
-      n.contains("don'tallow") ||
-      n.contains("whileusing") ||
+      n.contains("連絡先") ||
+      n.contains("写真") ||
+      n.contains("同意") ||
+      n.contains("allow") ||
+      n.contains("location") ||
+      n.contains("camera") ||
+      n.contains("microphone") ||
+      n.contains("notification") ||
       (n.contains("正確な位置") && n.contains("おおよそ"))
+  }
+
+  private fun looksLikeNotificationShade(n: String): Boolean {
+    return n.contains("通知シェード") ||
+      n.contains("クイック設定") ||
+      (n.contains("昨日") && n.contains("通知")) ||
+      n.contains("clearall")
   }
 
   private fun collectText(node: AccessibilityNodeInfo?, out: StringBuilder, depth: Int) {
@@ -92,5 +197,10 @@ class AssistDialogAccessibilityService : AccessibilityService() {
         }
       }
     }
+  }
+
+  companion object {
+    private const val DEBOUNCE_MS = 600L
+    private const val DEDUPE_MS = 45_000L
   }
 }

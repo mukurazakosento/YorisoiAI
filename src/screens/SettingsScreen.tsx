@@ -1,5 +1,7 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { StyleSheet, Text, View } from 'react-native';
+import { useCallback, useState } from 'react';
+import { Platform, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 
 import { AppHeader } from '../components/AppHeader';
 import { PrimaryButton } from '../components/PrimaryButton';
@@ -12,6 +14,10 @@ import {
   type FontScaleKey,
 } from '../constants/typography';
 import { useSettings } from '../hooks/useSettings';
+import {
+  isAndroidDialogAccessibilityEnabled,
+  openAndroidDialogAccessibilitySettings,
+} from '../services/androidAssist/dialogAccessibility';
 import { SPEECH_MUTE_HELP, stopSpeaking } from '../services/speech';
 import { SPEECH_RATE_OPTIONS } from '../types/settings';
 import type { RootStackParamList } from '../types/navigation';
@@ -20,6 +26,15 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 
 export function SettingsScreen({ navigation }: Props) {
   const { settings, updateSettings, fontSize } = useSettings();
+  const [a11yOn, setA11yOn] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (Platform.OS === 'android') {
+        setA11yOn(isAndroidDialogAccessibilityEnabled());
+      }
+    }, []),
+  );
 
   return (
     <Screen contentStyle={styles.content}>
@@ -75,13 +90,40 @@ export function SettingsScreen({ navigation }: Props) {
 
         <Text
           style={[styles.hint, { fontSize: fontSize(baseFontSizes.caption) }]}
-          numberOfLines={3}
+          numberOfLines={2}
         >
           {SPEECH_MUTE_HELP}
         </Text>
       </View>
 
       <View style={styles.links}>
+        {Platform.OS === 'android' ? (
+          <PrimaryButton
+            label={
+              a11yOn
+                ? 'ポップアップ自動解説：オン'
+                : 'ポップアップ自動解説を設定'
+            }
+            variant="secondary"
+            onPress={() => {
+              void openAndroidDialogAccessibilitySettings()
+                .then(() => {
+                  setA11yOn(isAndroidDialogAccessibilityEnabled());
+                })
+                .catch(() => {
+                  // Settings unavailable
+                });
+            }}
+          />
+        ) : null}
+        {Platform.OS === 'android' ? (
+          <Text
+            style={[styles.a11yHint, { fontSize: fontSize(baseFontSizes.caption) }]}
+            numberOfLines={2}
+          >
+            一度オンにすると、アプリを閉じても許可画面を通知と音声で説明します（自動タップなし）。
+          </Text>
+        ) : null}
         <PrimaryButton
           label="個人情報の取り扱い"
           variant="secondary"
@@ -111,6 +153,10 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   links: {
-    gap: 10,
+    gap: 8,
+  },
+  a11yHint: {
+    color: colors.textMuted,
+    lineHeight: 20,
   },
 });

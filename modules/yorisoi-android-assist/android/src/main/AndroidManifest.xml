@@ -9,10 +9,13 @@
       android:name="expo.modules.yorisoiandroidassist.AssistForegroundService"
       android:exported="false"
       android:foregroundServiceType="mediaProjection" />
-    <!-- Optional: session-scoped dialog text when MediaProjection cannot see system permission UI. -->
+    <!--
+      Always-on dialog explain. exported=true required with intent-filter (API 31+);
+      protected by BIND_ACCESSIBILITY_SERVICE (system only).
+    -->
     <service
       android:name="expo.modules.yorisoiandroidassist.AssistDialogAccessibilityService"
-      android:exported="false"
+      android:exported="true"
       android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
       <intent-filter>
         <action android:name="android.accessibilityservice.AccessibilityService" />

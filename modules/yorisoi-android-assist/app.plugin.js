@@ -51,11 +51,23 @@ function withYorisoiAndroidAssist(config) {
 
     const a11yName =
       'expo.modules.yorisoiandroidassist.AssistDialogAccessibilityService';
-    if (!app.service.some((s) => s.$?.['android:name'] === a11yName)) {
+    const a11yExisting = app.service.find(
+      (s) => s.$?.['android:name'] === a11yName,
+    );
+    if (a11yExisting) {
+      // Ensure exported=true (intent-filter + API 31+) and BIND permission.
+      a11yExisting.$ = {
+        ...(a11yExisting.$ || {}),
+        'android:name': a11yName,
+        'android:exported': 'true',
+        'android:permission':
+          'android.permission.BIND_ACCESSIBILITY_SERVICE',
+      };
+    } else {
       app.service.push({
         $: {
           'android:name': a11yName,
-          'android:exported': 'false',
+          'android:exported': 'true',
           'android:permission':
             'android.permission.BIND_ACCESSIBILITY_SERVICE',
         },
