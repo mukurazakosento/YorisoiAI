@@ -50,6 +50,20 @@ assert.match(nativePlanner, /AssistLlmBridge/);
 assert.match(nativePlanner, /antiLoop|anti-loop/);
 assert.match(nativePlanner, /画面を判断できませんでした/);
 assert.match(nativePlanner, /requiresUserConfirm|SENSITIVE/);
+assert.match(nativePlanner, /AssistConcreteGuidance|scrollTexts|直したい設定/);
+
+const concreteKt = read(
+  'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistConcreteGuidance.kt',
+);
+assert.match(concreteKt, /isVague/);
+assert.match(concreteKt, /scrollTexts/);
+assert.match(concreteKt, /tapTexts/);
+assert.doesNotMatch(
+  read(
+    'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistGuidanceRules.kt',
+  ),
+  /直したい項目を一つ開いてください/,
+);
 
 const fgs = read(
   'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistForegroundService.kt',
@@ -123,13 +137,38 @@ const wifi = buildGuidanceFromOcrText({
 assert.match(wifi.stepId, /wifi/);
 assert.doesNotMatch(wifi.stepId, /line/);
 
-// Notification settings
+// Notification settings — concrete label, not 「直したい項目」
 const notify = buildGuidanceFromOcrText({
   featureId: 'operationSupport',
   goalSummary: '通知設定を変えたい',
   ocrText: '設定 通知 オン オフ',
 });
 assert.match(notify.stepId, /settings-notify/);
+assert.match(notify.displayText, /通知|オン|オフ/);
+assert.doesNotMatch(notify.displayText, /直したい項目|適切な項目/);
+assert.match(notify.displayText, /上|下|左|右|中央|押して/);
+
+const {
+  isVagueGuidanceText,
+  rejectOrRewriteVagueGuidance,
+  formatScrollInstruction,
+} = await import(
+  pathToFileURL(path.join(root, 'src/services/androidAssist/concreteGuidance.ts')).href
+);
+assert.equal(isVagueGuidanceText('直したい項目を一つ開いてください。'), true);
+assert.equal(isVagueGuidanceText('画面の下あたりの「通知」を押してください。'), false);
+const rewritten = rejectOrRewriteVagueGuidance({
+  displayText: '直したい設定を開いてください。',
+  voiceText: '設定で直したい項目を選んでください。',
+  ocrText: '通知 アプリ 電池',
+  goalSummary: '通知',
+});
+assert.equal(rewritten.rewritten, true);
+assert.doesNotMatch(rewritten.displayText, /直したい/);
+assert.match(rewritten.displayText, /「通知」|スワイプ/);
+const scroll = formatScrollInstruction('Wi-Fi', '下へ');
+assert.match(scroll.displayText, /下へ/);
+assert.match(scroll.displayText, /Wi-Fi/);
 
 // Email / browser / shopping / picker / install
 assert.match(
@@ -221,10 +260,14 @@ const grounded = parseAndGroundOperationPlan(
   ctx,
 );
 assert.ok(
-  grounded.stepId.includes('unsure') ||
+  grounded.actionKind === 'scroll' ||
+    grounded.stepId.includes('unsure') ||
+    grounded.stepId.includes('scroll') ||
     grounded.displayText.includes('判断できません') ||
+    grounded.displayText.includes('スワイプ') ||
     (grounded.clarifyingQuestion && grounded.clarifyingQuestion.includes('宇宙')),
 );
+assert.doesNotMatch(grounded.displayText, /宇宙起動を押す/);
 
 // AI-off → demo
 resetOnDeviceAiForTests();
@@ -311,6 +354,50 @@ const pay = parseAndGroundOperationPlan(
 );
 assert.equal(pay.requiresUserConfirm, true);
 assert.equal(pay.actionKind, 'confirm_with_user');
+
+// Vague LLM output rewritten; missing target → scroll
+const vagueLive = parseAndGroundOperationPlan(
+  JSON.stringify({
+    screenDescription: '設定',
+    stage: 'settings',
+    actionKind: 'tap',
+    nextAction: '直したい項目を開く',
+    targetButtonText: null,
+    confidence: 0.8,
+    displayText: '直したい設定を開いてください。',
+    voiceText: '適切な項目を選んでください。',
+    stepId: 'vague',
+    expectNextScreen: '次',
+  }),
+  buildScreenContext({
+    goalSummary: '通知設定',
+    ocrText: '通知 アプリ 電池',
+  }),
+);
+assert.doesNotMatch(vagueLive.displayText, /直したい設定|適切な項目/);
+assert.match(vagueLive.displayText, /「|スワイプ|ですか/);
+
+const missingTarget = parseAndGroundOperationPlan(
+  JSON.stringify({
+    screenDescription: '設定',
+    stage: 'settings',
+    actionKind: 'tap',
+    nextAction: '通知を開く',
+    targetButtonText: '通知',
+    confidence: 0.85,
+    displayText: '通知を押してください',
+    voiceText: '通知',
+    stepId: 'miss',
+    expectNextScreen: '通知画面',
+  }),
+  buildScreenContext({
+    goalSummary: '通知',
+    ocrText: 'ネットワークとインターネット アプリ 電池',
+  }),
+);
+assert.equal(missingTarget.actionKind, 'scroll');
+assert.match(missingTarget.displayText, /下へ|スワイプ/);
+assert.match(missingTarget.displayText, /通知/);
 
 resetOnDeviceAiForTests();
 assert.equal(unsurePlan().displayText.includes('判断できません'), true);

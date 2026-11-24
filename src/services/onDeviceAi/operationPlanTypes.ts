@@ -22,6 +22,12 @@ export type OperationPlan = {
   targetButtonText: string | null;
   /** Approximate normalized center 0–1, or null if unknown */
   approximatePosition: { x: number; y: number } | null;
+  /** 上/下/左/右/中央 when known from OCR/UI */
+  screenRegion: string | null;
+  /** 上へ / 下へ when scrolling to find a label */
+  scrollDirection: '上へ' | '下へ' | null;
+  /** What to look for after this step (or while scrolling) */
+  lookFor: string | null;
   why: string;
   confidence: number;
   displayText: string;

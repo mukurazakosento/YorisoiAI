@@ -3,10 +3,35 @@ import {
   inspectSafetyText,
   resolveSafetyInspectMode,
 } from '../security';
+import {
+  buildConcreteOpsStep,
+  estimateRegionFromOcr,
+  formatScrollInstruction,
+  formatTapInstruction,
+  rejectOrRewriteVagueGuidance,
+} from './concreteGuidance';
 import { detectPopup, explainPopup, explainScreenText } from './popupDetect';
 import type { AndroidAssistGuidance } from './types';
 
 type StepCore = Omit<AndroidAssistGuidance, 'at' | 'ocrTextPreview' | 'mode'>;
+
+function finalizeConcrete(step: StepCore, ocrRaw: string, goalSummary?: string): StepCore {
+  const fixed = rejectOrRewriteVagueGuidance({
+    displayText: step.displayText,
+    voiceText: step.voiceText,
+    ocrText: ocrRaw,
+    goalSummary,
+  });
+  if (!fixed.rewritten) {
+    return step;
+  }
+  return {
+    ...step,
+    stepId: fixed.actionKind === 'scroll' ? `${step.stepId}-scroll` : step.stepId,
+    displayText: fixed.displayText,
+    voiceText: fixed.voiceText,
+  };
+}
 
 /**
  * Stage-aware JS guidance (mirrors native AssistGuidanceRules).
@@ -101,34 +126,34 @@ export function buildGuidanceFromOcrText(input: {
   }
 
   if (looksLikeLinePhotoGoal(goal)) {
-    return base(linePhotoStep(o, ocrRaw));
+    return base(finalizeConcrete(linePhotoStep(o, ocrRaw), ocrRaw, input.goalSummary));
   }
   if (looksLikeWifiGoal(goal)) {
-    return base(wifiStep(o, ocrRaw));
+    return base(finalizeConcrete(wifiStep(o, ocrRaw), ocrRaw, input.goalSummary));
   }
   if (looksLikePhoneGoal(goal)) {
-    return base(phoneStep(o, ocrRaw));
+    return base(finalizeConcrete(phoneStep(o, ocrRaw), ocrRaw, input.goalSummary));
   }
   if (looksLikeEmailGoal(goal)) {
-    return base(emailStep(o, ocrRaw));
+    return base(finalizeConcrete(emailStep(o, ocrRaw), ocrRaw, input.goalSummary));
   }
   if (looksLikeBrowserGoal(goal)) {
-    return base(browserStep(o, ocrRaw));
+    return base(finalizeConcrete(browserStep(o, ocrRaw), ocrRaw, input.goalSummary));
   }
   if (looksLikeShoppingGoal(goal)) {
-    return base(shoppingStep(o, ocrRaw));
+    return base(finalizeConcrete(shoppingStep(o, ocrRaw), ocrRaw, input.goalSummary));
   }
   if (looksLikePhotoPickerGoal(goal)) {
-    return base(photoPickerStep(o, ocrRaw));
+    return base(finalizeConcrete(photoPickerStep(o, ocrRaw), ocrRaw, input.goalSummary));
   }
   if (looksLikeInstallGoal(goal)) {
-    return base(installStep(o, ocrRaw));
+    return base(finalizeConcrete(installStep(o, ocrRaw), ocrRaw, input.goalSummary));
   }
   if (looksLikeSettingsGoal(goal)) {
-    return base(settingsStep(o, ocrRaw));
+    return base(finalizeConcrete(settingsStep(o, ocrRaw, goal), ocrRaw, input.goalSummary));
   }
 
-  return base(ocrGroundedFallback(ocrRaw, input.goalSummary));
+  return base(finalizeConcrete(ocrGroundedFallback(ocrRaw, input.goalSummary), ocrRaw, input.goalSummary));
 }
 
 export function unreadableGuidanceStep(): StepCore {
@@ -464,45 +489,67 @@ function withSeen(
   if (!seen) {
     return { stepId, stageId, displayText: display, voiceText: voice };
   }
+  const { region, ordinal } = estimateRegionFromOcr(raw, seen);
+  const where =
+    ordinal != null
+      ? `画面の${region}（上から${ordinal}番目付近）の「${seen}」`
+      : `画面の${region}あたりの「${seen}」`;
   return {
     stepId,
     stageId,
-    displayText: `画面に「${seen}」とあります。${display}`.slice(0, 120),
-    voiceText: `いまの画面には「${seen}」と見えます。${voice}`,
+    displayText: `${where}です。${display}`.slice(0, 120),
+    voiceText: `いま${where}と見えます。${voice}`,
   };
 }
 
 function ocrGroundedOr(raw: string, generic: StepCore): StepCore {
   const label = firstUiLabel(raw);
-  if (!label) return generic;
-  const snippet = clipQuote(raw, 28);
+  if (!label) {
+    return finalizeConcrete(generic, raw);
+  }
+  const { region, ordinal } = estimateRegionFromOcr(raw, label);
+  const tap = formatTapInstruction({ label, region, ordinal });
   return {
     stepId: `${generic.stepId}-ocr`,
     stageId: generic.stageId,
-    displayText: `画面の「${label}」を押してください。`,
-    voiceText: `画面には「${snippet}」とあります。次は「${label}」を押してください。${generic.voiceText}`,
+    displayText: tap.displayText,
+    voiceText: tap.voiceText,
   };
 }
 
 function ocrGroundedFallback(raw: string, goalSummary: string): StepCore {
-  const snippet = clipQuote(raw, 28);
-  const label = firstUiLabel(raw);
-  const goalBit = goalSummary.trim().slice(0, 20);
-  if (label) {
-    return {
-      stepId: 'ocr-tap-label',
-      stageId: 'ocr-grounded',
-      displayText: `画面の「${label}」を押してください。`,
-      voiceText: `いまの画面には「${snippet}」とあります。次は「${label}」を一つ押してください。よりそいAIは代わりに押しません。`,
-    };
-  }
+  const concrete = buildConcreteOpsStep({
+    ocrText: raw,
+    preferredLabels: [
+      '通知',
+      'Wi-Fi',
+      'Wi‑Fi',
+      'ネットワークとインターネット',
+      'アプリ',
+      '電池',
+      'ディスプレイ',
+      '音',
+      'セキュリティ',
+      '許可する',
+      '許可しない',
+      '送信',
+      'アルバム',
+      'トーク',
+      '友だち',
+      '設定',
+      '検索',
+      '履歴',
+    ],
+    scrollTargetLabel: undefined,
+    goalSummary,
+    stepId: 'ocr-tap-label',
+    stageId: 'ocr-grounded',
+  });
   return {
-    stepId: 'ask-clarify',
-    stageId: 'clarify',
-    displayText: `画面に「${snippet}」とあります。やりたいことを一つ教えてください。`,
-    voiceText: `いまの画面には「${snippet}」と見えます。${
-      goalBit ? `「${goalBit}」について、` : ''
-    }次に押す場所を一つだけ教えてください。決めつけません。`,
+    stepId: concrete.stepId,
+    stageId: concrete.stageId,
+    displayText: concrete.displayText,
+    voiceText: concrete.voiceText,
   };
 }
 
@@ -545,22 +592,41 @@ function wifiStep(o: string, raw: string): StepCore {
       ['ネットワーク', 'Wi-Fi', 'Wi‑Fi', 'ワイファイ'],
     );
   }
-  if (o.includes('設定')) {
-    return withSeen(
-      'wifi-open-from-settings',
-      'wifi-settings',
-      '設定の中の「Wi-Fi」を押してください。',
-      'いま設定画面です。Wi-Fiの項目を押してください。',
-      raw,
-      ['Wi-Fi', 'Wi‑Fi', '設定'],
-    );
+  if (o.includes('設定') || o.includes('ネットワークとインターネット')) {
+    if (raw.includes('Wi-Fi') || raw.includes('Wi‑Fi') || o.includes('wifi')) {
+      const label = firstMatch(raw, ['Wi-Fi', 'Wi‑Fi', 'ネットワークとインターネット']) ?? 'Wi-Fi';
+      const { region, ordinal } = estimateRegionFromOcr(raw, label);
+      const tap = formatTapInstruction({ label, region, ordinal }, '接続');
+      return {
+        stepId: 'wifi-open-from-settings',
+        stageId: 'wifi-settings',
+        displayText: tap.displayText,
+        voiceText: tap.voiceText,
+      };
+    }
+    const scroll = formatScrollInstruction('Wi-Fi', '下へ');
+    return {
+      stepId: 'wifi-scroll-for-label',
+      stageId: 'wifi-settings',
+      displayText: scroll.displayText,
+      voiceText: scroll.voiceText,
+    };
   }
-  return ocrGroundedOr(raw, {
+  const home = buildConcreteOpsStep({
+    ocrText: raw,
+    preferredLabels: ['設定', 'Settings'],
+    scrollTargetLabel: '設定',
+    goalSummary: 'Wi-Fi',
     stepId: 'wifi-open',
     stageId: 'wifi-start',
-    displayText: '設定アプリを開き、「Wi-Fi」を選んでください。',
-    voiceText: '設定アプリを開き、Wi-Fiを選んでください。',
+    nextLookFor: 'Wi-Fi',
   });
+  return {
+    stepId: home.stepId,
+    stageId: home.stageId,
+    displayText: home.displayText,
+    voiceText: home.voiceText,
+  };
 }
 
 function phoneStep(o: string, raw: string): StepCore {
@@ -592,33 +658,84 @@ function phoneStep(o: string, raw: string): StepCore {
   });
 }
 
-function settingsStep(o: string, raw: string): StepCore {
+function settingsStep(o: string, raw: string, goalNormalized: string): StepCore {
+  const wantsNotify =
+    goalNormalized.includes('通知') || o.includes('通知');
   if (o.includes('通知') && (o.includes('オン') || o.includes('オフ') || o.includes('許可'))) {
-    return withSeen(
-      'settings-notify-toggle',
-      'settings-notify',
-      '通知のオン・オフを、必要な方へ合わせてください。',
-      '画面の通知スイッチを、必要な方へ一つ合わせてください。',
-      raw,
-      ['通知', 'オン', 'オフ', '許可'],
+    const label =
+      firstMatch(raw, ['通知', 'オン', 'オフ', '許可']) ?? '通知';
+    const { region, ordinal } = estimateRegionFromOcr(raw, label);
+    const tap = formatTapInstruction(
+      { label, region, ordinal },
+      'オンまたはオフ',
     );
+    return {
+      stepId: 'settings-notify-toggle',
+      stageId: 'settings-notify',
+      displayText: tap.displayText,
+      voiceText: `${tap.voiceText} オンとオフのどちらにするか、ご自身で決めてください。`,
+    };
   }
-  if (o.includes('通知')) {
-    return withSeen(
-      'settings-notify',
-      'settings-notify-list',
-      '一覧の「通知」を開いてください。',
-      '画面の一覧から「通知」を開いてください。',
-      raw,
-      ['通知'],
-    );
+  if (wantsNotify) {
+    if (raw.includes('通知')) {
+      const { region, ordinal } = estimateRegionFromOcr(raw, '通知');
+      const tap = formatTapInstruction({ label: '通知', region, ordinal });
+      return {
+        stepId: 'settings-notify',
+        stageId: 'settings-notify-list',
+        displayText: tap.displayText,
+        voiceText: tap.voiceText,
+      };
+    }
+    const scroll = formatScrollInstruction('通知', '下へ');
+    return {
+      stepId: 'settings-notify-scroll',
+      stageId: 'settings-home',
+      displayText: scroll.displayText,
+      voiceText: scroll.voiceText,
+    };
   }
-  return ocrGroundedOr(raw, {
+
+  // Goal-aware preferred labels from common Android settings
+  const preferred = [
+    'ネットワークとインターネット',
+    '通知',
+    'Wi-Fi',
+    'Wi‑Fi',
+    'アプリ',
+    '電池',
+    'ディスプレイ',
+    '音',
+    'セキュリティ',
+    'システム',
+    '設定',
+  ];
+  const goalHint = [
+    goalNormalized.includes('wifi') || goalNormalized.includes('ワイファイ')
+      ? 'Wi-Fi'
+      : null,
+    goalNormalized.includes('通知') ? '通知' : null,
+    goalNormalized.includes('音') ? '音' : null,
+    goalNormalized.includes('画面') || goalNormalized.includes('明る')
+      ? 'ディスプレイ'
+      : null,
+    goalNormalized.includes('アプリ') ? 'アプリ' : null,
+  ].filter(Boolean) as string[];
+
+  const concrete = buildConcreteOpsStep({
+    ocrText: raw,
+    preferredLabels: [...goalHint, ...preferred],
+    scrollTargetLabel: goalHint[0] ?? '通知',
+    goalSummary: goalNormalized,
     stepId: 'settings-open',
     stageId: 'settings-home',
-    displayText: '直したい項目を一つ開いてください。',
-    voiceText: '設定で、直したい項目を一つだけ開いてください。',
   });
+  return {
+    stepId: concrete.stepId,
+    stageId: concrete.stageId,
+    displayText: concrete.displayText,
+    voiceText: concrete.voiceText,
+  };
 }
 
 function linePhotoStep(o: string, raw: string): StepCore {

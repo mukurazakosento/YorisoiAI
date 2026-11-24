@@ -50,34 +50,53 @@ object AssistGuidanceRules {
     }
 
     if (looksLikeLinePhotoGoal(goal)) {
-      return linePhotoStep(o, raw)
+      return finalizeConcrete(linePhotoStep(o, raw), raw, goalSummary)
     }
     if (looksLikeWifiGoal(goal)) {
-      return wifiStep(o, raw)
+      return finalizeConcrete(wifiStep(o, raw), raw, goalSummary)
     }
     if (looksLikePhoneGoal(goal)) {
-      return phoneStep(o, raw)
+      return finalizeConcrete(phoneStep(o, raw), raw, goalSummary)
     }
     if (looksLikeEmailGoal(goal)) {
-      return emailStep(o, raw)
+      return finalizeConcrete(emailStep(o, raw), raw, goalSummary)
     }
     if (looksLikeBrowserGoal(goal)) {
-      return browserStep(o, raw)
+      return finalizeConcrete(browserStep(o, raw), raw, goalSummary)
     }
     if (looksLikeShoppingGoal(goal)) {
-      return shoppingStep(o, raw)
+      return finalizeConcrete(shoppingStep(o, raw), raw, goalSummary)
     }
     if (looksLikePhotoPickerGoal(goal)) {
-      return photoPickerStep(o, raw)
+      return finalizeConcrete(photoPickerStep(o, raw), raw, goalSummary)
     }
     if (looksLikeInstallGoal(goal)) {
-      return installStep(o, raw)
+      return finalizeConcrete(installStep(o, raw), raw, goalSummary)
     }
     if (looksLikeSettingsGoal(goal)) {
-      return settingsStep(o, raw)
+      return finalizeConcrete(settingsStep(o, raw, goal), raw, goalSummary)
     }
 
-    return ocrGroundedFallback(raw, goalSummary)
+    return finalizeConcrete(ocrGroundedFallback(raw, goalSummary), raw, goalSummary)
+  }
+
+  private fun finalizeConcrete(step: Step, ocrRaw: String, goalSummary: String = ""): Step {
+    val (display, voice, kind) =
+      AssistConcreteGuidance.rewriteIfVague(
+        step.displayText,
+        step.voiceText,
+        ocrRaw,
+        scrollTarget = null,
+        goal = goalSummary,
+      )
+    if (kind == "keep") {
+      return step
+    }
+    return step.copy(
+      stepId = if (kind == "scroll") "${step.stepId}-scroll" else step.stepId,
+      displayText = display,
+      voiceText = voice,
+    )
   }
 
   fun unreadableStep(): Step {
@@ -161,24 +180,24 @@ object AssistGuidanceRules {
 
   /** When goal is unclear: still cite OCR, never invent LINE photo steps. */
   private fun ocrGroundedFallback(raw: String, goalSummary: String): Step {
-    val snippet = clipQuote(raw, 28)
     val label = firstUiLabel(raw)
-    val goalBit = goalSummary.trim().take(20)
-    return if (label != null) {
-      Step(
+    if (label != null) {
+      val hint = AssistConcreteGuidance.estimateRegion(raw, label)
+      val (d, v) = AssistConcreteGuidance.tapTexts(label, hint.region, hint.ordinal)
+      return Step(
         stepId = "ocr-tap-label",
         stageId = "ocr-grounded",
-        displayText = "画面の「$label」を押してください。",
-        voiceText = "いまの画面には「$snippet」とあります。次は「$label」を一つ押してください。よりそいAIは代わりに押しません。",
-      )
-    } else {
-      Step(
-        stepId = "ask-clarify",
-        stageId = "clarify",
-        displayText = "画面に「$snippet」とあります。やりたいことを一つ教えてください。",
-        voiceText = "いまの画面には「$snippet」と見えます。${if (goalBit.isNotEmpty()) "「${goalBit}」について、" else ""}次に押す場所を一つだけ教えてください。決めつけません。",
+        displayText = d,
+        voiceText = v,
       )
     }
+    val (d, v) = AssistConcreteGuidance.choiceTexts(emptyList(), goalSummary.trim().take(16))
+    return Step(
+      stepId = "ask-clarify",
+      stageId = "clarify",
+      displayText = d,
+      voiceText = v,
+    )
   }
 
   private fun wifiStep(o: String, raw: String): Step {
@@ -211,25 +230,38 @@ object AssistGuidanceRules {
           raw,
           listOf("ネットワーク", "Wi-Fi", "Wi‑Fi", "ワイファイ"),
         )
-      o.contains("設定") ->
-        step(
-          "wifi-open-from-settings",
-          "wifi-settings",
-          "設定の中の「Wi-Fi」を押してください。",
-          "いま設定画面です。Wi-Fiの項目を押してください。",
-          raw,
-          listOf("Wi-Fi", "Wi‑Fi", "設定"),
-        )
-      else ->
-        ocrGroundedOr(
-          raw,
+      o.contains("設定") || o.contains("ネットワークとインターネット") -> {
+        val wifiLabel =
+          firstMatch(raw, listOf("Wi-Fi", "Wi‑Fi", "ネットワークとインターネット"))
+        if (wifiLabel != null) {
+          val hint = AssistConcreteGuidance.estimateRegion(raw, wifiLabel)
+          val (d, v) = AssistConcreteGuidance.tapTexts(wifiLabel, hint.region, hint.ordinal, "接続")
           Step(
-            stepId = "wifi-open",
-            stageId = "wifi-start",
-            displayText = "設定アプリを開き、「Wi-Fi」を選んでください。",
-            voiceText = "設定アプリを開き、Wi-Fiを選んでください。",
-          ),
-        )
+            stepId = "wifi-open-from-settings",
+            stageId = "wifi-settings",
+            displayText = d,
+            voiceText = v,
+          )
+        } else {
+          val (d, v) = AssistConcreteGuidance.scrollTexts("Wi-Fi", "下へ")
+          Step(
+            stepId = "wifi-scroll-for-label",
+            stageId = "wifi-settings",
+            displayText = d,
+            voiceText = v,
+          )
+        }
+      }
+      else -> {
+        if (raw.contains("設定")) {
+          val hint = AssistConcreteGuidance.estimateRegion(raw, "設定")
+          val (d, v) = AssistConcreteGuidance.tapTexts("設定", hint.region, hint.ordinal, "Wi-Fi")
+          Step(stepId = "wifi-open", stageId = "wifi-start", displayText = d, voiceText = v)
+        } else {
+          val (d, v) = AssistConcreteGuidance.scrollTexts("設定", "下へ")
+          Step(stepId = "wifi-open-scroll", stageId = "wifi-start", displayText = d, voiceText = v)
+        }
+      }
     }
   }
 
@@ -266,37 +298,78 @@ object AssistGuidanceRules {
     }
   }
 
-  private fun settingsStep(o: String, raw: String): Step {
-    return when {
-      o.contains("通知") && (o.contains("オン") || o.contains("オフ") || o.contains("許可")) ->
-        step(
-          "settings-notify-toggle",
-          "settings-notify",
-          "通知のオン・オフを、必要な方へ合わせてください。",
-          "画面の通知スイッチを、必要な方へ一つ合わせてください。",
-          raw,
-          listOf("通知", "オン", "オフ", "許可"),
-        )
-      o.contains("通知") ->
-        step(
-          "settings-notify",
-          "settings-notify-list",
-          "一覧の「通知」を開いてください。",
-          "画面の一覧から「通知」を開いてください。",
-          raw,
-          listOf("通知"),
-        )
-      else ->
-        ocrGroundedOr(
-          raw,
-          Step(
-            stepId = "settings-open",
-            stageId = "settings-home",
-            displayText = "直したい項目を一つ開いてください。",
-            voiceText = "設定で、直したい項目を一つだけ開いてください。",
-          ),
-        )
+  private fun settingsStep(o: String, raw: String, goalNormalized: String): Step {
+    val wantsNotify = goalNormalized.contains("通知") || o.contains("通知")
+    if (o.contains("通知") && (o.contains("オン") || o.contains("オフ") || o.contains("許可"))) {
+      val label = firstMatch(raw, listOf("通知", "オン", "オフ", "許可")) ?: "通知"
+      val hint = AssistConcreteGuidance.estimateRegion(raw, label)
+      val (d, v) = AssistConcreteGuidance.tapTexts(label, hint.region, hint.ordinal, "オンまたはオフ")
+      return Step(
+        stepId = "settings-notify-toggle",
+        stageId = "settings-notify",
+        displayText = d,
+        voiceText = "$v オンとオフのどちらにするか、ご自身で決めてください。",
+      )
     }
+    if (wantsNotify) {
+      if (raw.contains("通知")) {
+        val hint = AssistConcreteGuidance.estimateRegion(raw, "通知")
+        val (d, v) = AssistConcreteGuidance.tapTexts("通知", hint.region, hint.ordinal)
+        return Step(
+          stepId = "settings-notify",
+          stageId = "settings-notify-list",
+          displayText = d,
+          voiceText = v,
+        )
+      }
+      val (d, v) = AssistConcreteGuidance.scrollTexts("通知", "下へ")
+      return Step(
+        stepId = "settings-notify-scroll",
+        stageId = "settings-home",
+        displayText = d,
+        voiceText = v,
+      )
+    }
+    val preferred =
+      listOf(
+        "ネットワークとインターネット",
+        "通知",
+        "Wi-Fi",
+        "Wi‑Fi",
+        "アプリ",
+        "電池",
+        "ディスプレイ",
+        "音",
+        "セキュリティ",
+        "システム",
+        "設定",
+      )
+    for (label in preferred) {
+      if (raw.contains(label)) {
+        val hint = AssistConcreteGuidance.estimateRegion(raw, label)
+        val (d, v) = AssistConcreteGuidance.tapTexts(label, hint.region, hint.ordinal)
+        return Step(
+          stepId = "settings-open",
+          stageId = "settings-home",
+          displayText = d,
+          voiceText = v,
+        )
+      }
+    }
+    val scrollFor =
+      when {
+        goalNormalized.contains("wifi") || goalNormalized.contains("ワイファイ") -> "Wi-Fi"
+        goalNormalized.contains("音") -> "音"
+        goalNormalized.contains("アプリ") -> "アプリ"
+        else -> "通知"
+      }
+    val (d, v) = AssistConcreteGuidance.scrollTexts(scrollFor, "下へ")
+    return Step(
+      stepId = "settings-open-scroll",
+      stageId = "settings-home",
+      displayText = d,
+      voiceText = v,
+    )
   }
 
   /**
@@ -434,11 +507,18 @@ object AssistGuidanceRules {
     if (seen == null) {
       return Step(stepId, stageId, display, voice)
     }
+    val hint = AssistConcreteGuidance.estimateRegion(raw, seen)
+    val where =
+      if (hint.ordinal != null) {
+        "画面の${hint.region}（上から${hint.ordinal}番目付近）の「$seen」"
+      } else {
+        "画面の${hint.region}あたりの「$seen」"
+      }
     return Step(
       stepId = stepId,
       stageId = stageId,
-      displayText = "画面に「$seen」とあります。$display".take(120),
-      voiceText = "いまの画面には「$seen」と見えます。$voice",
+      displayText = "${where}です。$display".take(120),
+      voiceText = "いま${where}と見えます。$voice",
     )
   }
 
@@ -450,12 +530,13 @@ object AssistGuidanceRules {
     if (label == null) {
       return generic
     }
-    val snippet = clipQuote(raw, 28)
+    val hint = AssistConcreteGuidance.estimateRegion(raw, label)
+    val (d, v) = AssistConcreteGuidance.tapTexts(label, hint.region, hint.ordinal)
     return Step(
       stepId = "${generic.stepId}-ocr",
       stageId = generic.stageId,
-      displayText = "画面の「$label」を押してください。",
-      voiceText = "画面には「$snippet」とあります。次は「$label」を押してください。${generic.voiceText}",
+      displayText = d,
+      voiceText = v,
     )
   }
 

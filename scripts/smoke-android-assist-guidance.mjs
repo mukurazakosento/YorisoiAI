@@ -128,10 +128,32 @@ const unclear = buildGuidanceFromOcrText({
 });
 // OCR-grounded: cite visible label instead of inventing LINE photo steps.
 assert.ok(
-  unclear.stepId === 'ask-clarify' || unclear.stepId === 'ocr-tap-label',
+  unclear.stepId === 'ask-clarify' ||
+    unclear.stepId === 'ocr-tap-label' ||
+    unclear.stepId.startsWith('ocr-tap-label'),
 );
 assert.match(unclear.displayText, /ホーム/);
 assert.doesNotMatch(unclear.displayText, /LINEで孫/);
+assert.doesNotMatch(unclear.displayText, /直したい項目|適切な項目/);
+
+// --- Concrete settings (no vague delegation) ---
+const settingsVagueOcr = buildGuidanceFromOcrText({
+  featureId: 'operationSupport',
+  goalSummary: '設定を直したい',
+  ocrText: 'ネットワークとインターネット アプリ 電池',
+});
+assert.doesNotMatch(settingsVagueOcr.displayText, /直したい項目|適切な項目を選/);
+assert.match(settingsVagueOcr.displayText, /「[^」]+」/);
+assert.match(settingsVagueOcr.displayText, /押してください|スワイプ/);
+
+const notifyScroll = buildGuidanceFromOcrText({
+  featureId: 'operationSupport',
+  goalSummary: '通知設定を変えたい',
+  ocrText: '設定 ネットワークとインターネット アプリ 電池',
+});
+assert.match(notifyScroll.stepId, /scroll|settings/);
+assert.match(notifyScroll.displayText, /通知|スワイプ|下へ/);
+assert.doesNotMatch(notifyScroll.displayText, /直したい/);
 
 // --- unconfirmed send ≠ complete ---
 assert.equal(hasClearSentConfirmation('送信'), false);

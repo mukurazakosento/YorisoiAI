@@ -93,9 +93,12 @@ object AssistOperationPlanner {
     val prompt =
       buildString {
         appendLine("あなたは高齢者向けスマホ支援の操作計画です。JSONのみ。自動操作禁止。")
-        appendLine("根拠に無いボタンは出さない。不明なら displayText に「画面を判断できませんでした」。")
+        appendLine("根拠に無いボタンは出さない。displayTextは「ラベル」引用＋位置（上/下/左/右/中央）。")
+        appendLine("禁止: 直したい設定を開いて／適切な項目を選んで、など曖昧な委任。")
+        appendLine("対象が無いときは scrollDirection=下へ で探す文字を lookFor に書く。")
+        appendLine("不明なら具体的な二択か Yes/No。")
         appendLine(
-          """形式: {"stage":"","targetButtonText":null,"confidence":0.0,"displayText":"","voiceText":"","stepId":"","requiresUserConfirm":false}""",
+          """形式: {"stage":"","actionKind":"tap|scroll|ask","targetButtonText":null,"screenRegion":null,"scrollDirection":null,"lookFor":null,"confidence":0.0,"displayText":"","voiceText":"","stepId":"","requiresUserConfirm":false}""",
         )
         appendLine("目標: ${AssistSecretRedactor.forPublicText(snap.goalSummary)}")
         appendLine("アプリ: ${snap.appName} / ${snap.packageName}")
@@ -114,6 +117,7 @@ object AssistOperationPlanner {
     return try {
       val obj = JSONObject(jsonText)
       val target = obj.optString("targetButtonText", "").trim()
+      val lookFor = obj.optString("lookFor", "").trim().ifBlank { target }
       val confidence = obj.optDouble("confidence", 0.4)
       var display =
         AssistSecretRedactor.forPublicText(obj.optString("displayText", "").trim())
@@ -122,6 +126,7 @@ object AssistOperationPlanner {
       val stage = obj.optString("stage", "llm").ifBlank { "llm" }
       var stepId = obj.optString("stepId", "").ifBlank { "llm-$stage" }
       val requiresConfirm = obj.optBoolean("requiresUserConfirm", false)
+      val actionKind = obj.optString("actionKind", "tap").trim().lowercase()
 
       if (display.isBlank()) {
         return unsureStep()
@@ -129,10 +134,50 @@ object AssistOperationPlanner {
       if (confidence < 0.35) {
         return unsureStep()
       }
-      if (target.isNotEmpty() && !evidence.replace("\\s+".toRegex(), "").contains(target.replace("\\s+".toRegex(), ""))) {
-        return unsureStep(
-          "「$target」は画面に見当たりません。どれを押しますか？",
+      val targetVisible =
+        target.isNotEmpty() &&
+          evidence.replace("\\s+".toRegex(), "").contains(target.replace("\\s+".toRegex(), ""))
+      if (target.isNotEmpty() && !targetVisible) {
+        val (d, v) = AssistConcreteGuidance.scrollTexts(lookFor.ifBlank { target }, "下へ")
+        return AssistGuidanceRules.Step(
+          stepId = "scroll-for-${target.take(12)}".take(64),
+          stageId = "scroll",
+          displayText = d,
+          voiceText = v,
+          mode = "live",
         )
+      }
+      if (AssistConcreteGuidance.isVague("$display\n$voice")) {
+        if (actionKind == "scroll" || obj.optString("scrollDirection").isNotBlank()) {
+          val dir = obj.optString("scrollDirection", "下へ").ifBlank { "下へ" }
+          val (d, v) = AssistConcreteGuidance.scrollTexts(lookFor.ifBlank { "目的の項目" }, dir)
+          display = d
+          voice = v
+          stepId = "$stepId-scroll"
+        } else if (targetVisible) {
+          val hint = AssistConcreteGuidance.estimateRegion(evidence, target)
+          val (d, v) = AssistConcreteGuidance.tapTexts(target, hint.region, hint.ordinal, lookFor)
+          display = d
+          voice = v
+        } else {
+          val (d, v, kind) =
+            AssistConcreteGuidance.rewriteIfVague(
+              display,
+              voice,
+              evidence,
+              scrollTarget = lookFor.ifBlank { null },
+            )
+          display = d
+          voice = v
+          if (kind != "keep") {
+            stepId = "$stepId-$kind"
+          }
+        }
+      } else if (targetVisible && !display.contains(target)) {
+        val hint = AssistConcreteGuidance.estimateRegion(evidence, target)
+        val (d, v) = AssistConcreteGuidance.tapTexts(target, hint.region, hint.ordinal, lookFor)
+        display = d
+        voice = v
       }
       if (requiresConfirm || SENSITIVE.containsMatchIn(display + target)) {
         display = "確認してから進めてください。$display".take(120)
