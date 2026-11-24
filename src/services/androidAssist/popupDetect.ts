@@ -37,6 +37,17 @@ function normalize(text: string): string {
   return text.toLowerCase().replace(/\s+/g, '');
 }
 
+/** Reject re-reading our own guidance notification / TTS as a live dialog. */
+function looksLikeOwnGuidance(n: string): boolean {
+  return (
+    n.includes('聞いている画面です') ||
+    n.includes('代わりに押しません') ||
+    n.includes('よりそいai') ||
+    n.includes('断定はしません') ||
+    n.includes('自分の目で確認してください')
+  );
+}
+
 function clip(text: string, max: number): string {
   const t = text.replace(/\s+/g, ' ').trim();
   return t.length <= max ? t : `${t.slice(0, max)}…`;
@@ -261,6 +272,7 @@ export function detectPopup(ocrText: string): PopupDetection | null {
   const raw = ocrText.trim();
   if (raw.length < 4) return null;
   const n = normalize(raw);
+  if (looksLikeOwnGuidance(n)) return null;
   if (!looksLikeDialog(n)) return null;
   const buttons = extractButtons(raw, n);
   const kind = classifyKind(n);

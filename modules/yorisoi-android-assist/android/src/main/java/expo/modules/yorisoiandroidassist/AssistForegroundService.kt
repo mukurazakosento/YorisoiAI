@@ -489,23 +489,45 @@ class AssistForegroundService : Service() {
   }
 
   /**
-   * Dialog holder text for ops/text; for safety also peek active window when a11y is on.
+   * Dialog holder text for ops/text; prefer live visible a11y peek over retained text
+   * so a dismissed camera sheet cannot be re-explained from a stale holder.
+   * Safety also peeks the active window when armed.
    */
   private fun collectAssistTextForFeature(): String {
     val recent = AssistDialogTextHolder.peekRecent()
-    if (featureId != "safetyCheck" || !AssistSafetySession.isArmed()) {
-      return recent
+    val peeked =
+      if (AssistDialogAccessibilityService.isServiceConnected()) {
+        AssistDialogAccessibilityService.peekActiveWindowText()
+      } else {
+        ""
+      }
+
+    if (featureId == "safetyCheck" && AssistSafetySession.isArmed()) {
+      if (peeked.isBlank()) {
+        return recent
+      }
+      if (recent.isBlank()) {
+        return peeked
+      }
+      val mode = AssistSafetyInspector.resolveMode(goalSummary)
+      return AssistSafetyInspector.pickBestSafetyText(recent, peeked, mode)
     }
-    val peeked = AssistDialogAccessibilityService.peekActiveWindowText()
-    if (peeked.isBlank()) {
-      return recent
-    }
-    if (recent.isBlank()) {
+
+    // Ops / textExplanation: live dialog text wins; clear holder when dialog is gone.
+    val liveDialog = peeked.isNotBlank() && AssistPopupDetector.detect(peeked) != null
+    if (liveDialog) {
+      AssistDialogTextHolder.publish(peeked)
       return peeked
     }
-    // Prefer whichever helps phone/email detection.
-    val mode = AssistSafetyInspector.resolveMode(goalSummary)
-    return AssistSafetyInspector.pickBestSafetyText(recent, peeked, mode)
+    if (recent.isNotBlank() && AssistPopupDetector.detect(recent) != null) {
+      // Retained text but live window is not a dialog → phantom risk; drop it.
+      if (peeked.isNotBlank() || AssistDialogAccessibilityService.isServiceConnected()) {
+        AssistDialogTextHolder.clear()
+        return ""
+      }
+      return recent
+    }
+    return recent
   }
 
   /**
