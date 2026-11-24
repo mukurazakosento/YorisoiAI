@@ -109,6 +109,21 @@ export function buildGuidanceFromOcrText(input: {
   if (looksLikePhoneGoal(goal)) {
     return base(phoneStep(o, ocrRaw));
   }
+  if (looksLikeEmailGoal(goal)) {
+    return base(emailStep(o, ocrRaw));
+  }
+  if (looksLikeBrowserGoal(goal)) {
+    return base(browserStep(o, ocrRaw));
+  }
+  if (looksLikeShoppingGoal(goal)) {
+    return base(shoppingStep(o, ocrRaw));
+  }
+  if (looksLikePhotoPickerGoal(goal)) {
+    return base(photoPickerStep(o, ocrRaw));
+  }
+  if (looksLikeInstallGoal(goal)) {
+    return base(installStep(o, ocrRaw));
+  }
   if (looksLikeSettingsGoal(goal)) {
     return base(settingsStep(o, ocrRaw));
   }
@@ -192,12 +207,51 @@ function looksLikePhoneGoal(g: string): boolean {
 }
 
 function looksLikeSettingsGoal(g: string): boolean {
+  return g.includes('設定') || g.includes('通知');
+}
+
+function looksLikeEmailGoal(g: string): boolean {
+  return g.includes('メール') || g.includes('gmail') || g.includes('メールを送');
+}
+
+function looksLikeBrowserGoal(g: string): boolean {
   return (
-    g.includes('設定') ||
-    g.includes('通知') ||
+    g.includes('ブラウザ') ||
+    g.includes('chrome') ||
+    g.includes('ネットで') ||
+    g.includes('ウェブ') ||
+    g.includes('ホームページ')
+  );
+}
+
+function looksLikeShoppingGoal(g: string): boolean {
+  return (
+    g.includes('買い物') ||
+    g.includes('購入') ||
+    g.includes('注文') ||
+    g.includes('カート') ||
+    g.includes('アマゾン') ||
+    g.includes('楽天')
+  );
+}
+
+function looksLikePhotoPickerGoal(g: string): boolean {
+  const media = g.includes('写真') || g.includes('画像') || g.includes('ファイル');
+  const pick =
+    g.includes('選') ||
+    g.includes('ピッカー') ||
+    g.includes('添付') ||
+    g.includes('ギャラリー');
+  return media && pick;
+}
+
+function looksLikeInstallGoal(g: string): boolean {
+  return (
     g.includes('アプリを入れ') ||
     g.includes('インストール') ||
-    g.includes('アンインストール')
+    g.includes('アンインストール') ||
+    g.includes('playストア') ||
+    g.includes('ストアで')
   );
 }
 
@@ -236,7 +290,166 @@ function firstUiLabel(raw: string): string | null {
     '閉じる',
     '選択',
     '添付',
+    'インストール',
+    '購入',
+    '注文',
+    'カート',
+    '検索',
+    '履歴',
+    'ファイル',
   ]);
+}
+
+function emailStep(o: string, raw: string): StepCore {
+  if (o.includes('送信') || o.includes('送る')) {
+    return withSeen(
+      'email-confirm-send',
+      'email-pre-send',
+      '宛先と内容を確かめてから「送信」を押してください。',
+      '宛先と本文を確かめてから送信を押してください。代わりには送りません。',
+      raw,
+      ['送信', '送る'],
+    );
+  }
+  if (o.includes('作成') || o.includes('新規') || o.includes('書き込み')) {
+    return withSeen(
+      'email-compose',
+      'email-compose',
+      '宛先と用件を入れてください。',
+      'メール作成画面です。宛先と用件を入れてください。代わりには入力しません。',
+      raw,
+      ['作成', '新規', '宛先'],
+    );
+  }
+  if (o.includes('受信') || o.includes('受信トレイ') || o.includes('inbox')) {
+    return withSeen(
+      'email-inbox',
+      'email-inbox',
+      '開きたいメールを一つ選んでください。',
+      '受信トレイから、開きたいメールを一つ選んでください。',
+      raw,
+      ['受信', '受信トレイ'],
+    );
+  }
+  return ocrGroundedOr(raw, {
+    stepId: 'email-open',
+    stageId: 'email-start',
+    displayText: 'メールアプリを開いてください。',
+    voiceText: 'メールアプリを開き、やりたい画面まで進めてください。',
+  });
+}
+
+function browserStep(o: string, raw: string): StepCore {
+  if (o.includes('検索') || o.includes('google') || o.includes('アドレス')) {
+    return withSeen(
+      'browser-search',
+      'browser-search',
+      '調べたい言葉を入れて検索してください。',
+      '検索欄に調べたい言葉を入れてください。代わりには入力しません。',
+      raw,
+      ['検索', 'Google'],
+    );
+  }
+  return ocrGroundedOr(raw, {
+    stepId: 'browser-open',
+    stageId: 'browser-start',
+    displayText: 'ブラウザを開いてください。',
+    voiceText: 'ブラウザを開き、調べたいページへ進めてください。',
+  });
+}
+
+function shoppingStep(o: string, raw: string): StepCore {
+  if (o.includes('購入') || o.includes('注文を確定') || o.includes('支払い')) {
+    return withSeen(
+      'shop-confirm-pay',
+      'shop-pay',
+      '金額と届け先を確かめてから、ご自身で進めてください。',
+      '購入や支払いは、内容を確かめてからご自身で押してください。代わりには買いません。',
+      raw,
+      ['購入', '注文を確定', '支払い'],
+    );
+  }
+  if (o.includes('カート') || o.includes('かご')) {
+    return withSeen(
+      'shop-cart',
+      'shop-cart',
+      'カートの中身を確かめてください。',
+      'カートの商品を確かめてください。購入は急がなくて大丈夫です。',
+      raw,
+      ['カート', 'かご'],
+    );
+  }
+  return ocrGroundedOr(raw, {
+    stepId: 'shop-open',
+    stageId: 'shop-start',
+    displayText: '買い物アプリを開いてください。',
+    voiceText:
+      '買い物アプリを開き、見たい商品まで進めてください。購入はご自身で確認してから。',
+  });
+}
+
+function photoPickerStep(o: string, raw: string): StepCore {
+  if (
+    o.includes('アルバム') ||
+    o.includes('ギャラリー') ||
+    o.includes('最近の項目') ||
+    o.includes('ファイル') ||
+    o.includes('ドキュメント')
+  ) {
+    return withSeen(
+      'picker-choose',
+      'picker-grid',
+      '送りたい写真やファイルを一つ選んでください。',
+      '一覧から、使いたい写真やファイルを一つだけ選んでください。',
+      raw,
+      ['アルバム', 'ギャラリー', '最近の項目', 'ファイル', 'ドキュメント'],
+    );
+  }
+  if (o.includes('許可')) {
+    return withSeen(
+      'picker-permission',
+      'picker-permission',
+      '写真へのアクセスを、必要な方だけ選んでください。',
+      '写真やファイルへの許可画面です。必要な方を、ご自身で選んでください。代わりには押しません。',
+      raw,
+      ['許可する', '許可しない', '写真'],
+    );
+  }
+  return ocrGroundedOr(raw, {
+    stepId: 'picker-open',
+    stageId: 'picker-start',
+    displayText: '写真やファイルを選ぶ画面を開いてください。',
+    voiceText: '写真やファイルを選ぶ画面を開いて、一つ選んでください。',
+  });
+}
+
+function installStep(o: string, raw: string): StepCore {
+  if (o.includes('アンインストール') || o.includes('削除')) {
+    return withSeen(
+      'install-uninstall',
+      'install-uninstall',
+      '消してよいアプリか確かめてから進めてください。',
+      'アンインストールは取り消せないことがあります。確かめてから、ご自身で進めてください。',
+      raw,
+      ['アンインストール', '削除'],
+    );
+  }
+  if (o.includes('インストール') || o.includes('入手') || o.includes('更新')) {
+    return withSeen(
+      'install-confirm',
+      'install-confirm',
+      'アプリ名を確かめてから「インストール」を押してください。',
+      'アプリの名前を確かめてから、インストールを押してください。代わりには押しません。',
+      raw,
+      ['インストール', '入手', '更新'],
+    );
+  }
+  return ocrGroundedOr(raw, {
+    stepId: 'install-open',
+    stageId: 'install-start',
+    displayText: 'Playストアを開いてください。',
+    voiceText: 'Playストアを開き、入れたいアプリを探してください。',
+  });
 }
 
 function withSeen(

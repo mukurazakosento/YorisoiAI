@@ -7,7 +7,7 @@
 - Expo SDK（`package.json` の `expo` 版を確認）+ React Native + TypeScript
 - 画面遷移は **React Navigation Native Stack**（`src/navigation/`）。Expo Router は使わない
 - 依存追加は `npx expo install <package>`（firebase / zod / `@mlc-ai/web-llm` など Expo 非管理は `npm install`）
-- **AI 既定**: 端末内 Llama 系（`src/services/onDeviceAi/`）。Web は WebLLM、ネイティブは llama.cpp / ExecuTorch スキャフォールド
+- **AI 既定**: 端末内（`src/services/onDeviceAi/`）。Web は WebLLM。Android ネイティブは MediaPipe GenAI + Gemma 3 1B int4（`modules/yorisoi-on-device-llm/`、同意後ダウンロード・probe 成功時のみ live）。iOS は未接続
 - 未接続時は明示 **デモ / AI未接続**。`mode: live` はエンジン ready のときだけ
 - **画面フレーム**: `src/services/capture/`（利用者開始のスクショ選択＋端末内 OCR。Broadcast Upload は未リンク）
 - **Android 背面支援**: `modules/yorisoi-android-assist` + `src/services/androidAssist/`（MediaProjection＋FGS・操作支援は約20秒 OCR、文章説明は約4秒でポップアップ捕捉・変化時案内＋即時通知）。Android 14+ は画面全体共有を要求。**ポップアップ自動解説**は設定で一度オンにした AccessibilityService が常時稼働（Activity 非表示でも許可ダイアログを通知+TTS・自動タップなし・MediaProjection不要）。案内は OCR ラベル引用。iOS/Web/Expo Go では不可
@@ -36,7 +36,8 @@
 `src/{components,screens,navigation,services/{capture,androidAssist,onDeviceAi,ai,ocr,speech,notifications,security,firebase,session},hooks,types,constants,utils,data}`  
 `functions/src/{ai,shared,...}`（旧 Gemini 経路・任意）  
 `modules/yorisoi-mlkit-ocr/`  
-`modules/yorisoi-android-assist/`（Android のみ）
+`modules/yorisoi-android-assist/`（Android のみ）  
+`modules/yorisoi-on-device-llm/`（Android MediaPipe LLM）
 
 ## Phase C / Phase D 画面フロー
 
@@ -54,12 +55,13 @@ npm run smoke:popup-auto-assist
 npm run smoke:ocr-aligned-guidance
 npm run smoke:notify-privacy
 npm run smoke:on-device
+npm run smoke:operation-planner
 npm run smoke:session
 npm run smoke:speech
 npm run smoke:ocr
 npx expo start
 ```
 
-OCR / 画面フレーム読み取り / Android 背面支援は EAS development または preview APK が必要。画像は端末外へ送らない。  
+OCR / 画面フレーム読み取り / Android 背面支援 / 端末内 LLM は EAS development または preview APK が必要。画像は端末外へ送らない。  
 WebLLM の実ロードは `EXPO_PUBLIC_ON_DEVICE_AI=true` かつ WebGPU 付きブラウザが必要（失敗時はデモのまま）。  
-ネイティブ Llama は未接続（`createNativeLlamaEngine` は null）。背面案内のヒューリスティックを live AI と偽らない。
+ネイティブ LLM は同意→モデル取得→probe 成功後のみ live。Cloud Agent VM では MediaPipe 推論未実行（実機未確認を偽らない）。ヒューリスティックを live と偽らない。

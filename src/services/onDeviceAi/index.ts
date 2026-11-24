@@ -62,6 +62,32 @@ export {
   setOnDeviceEngineForTests,
 };
 
+export {
+  ANDROID_NATIVE_MODEL,
+  MODEL_CONSENT_EXPLAIN_JA,
+} from './modelCatalog';
+export {
+  planOperationSupport,
+  buildOperationPlannerSystemPrompt,
+  buildOperationPlannerUserPrompt,
+} from './operationPlanner';
+export type { PlanOperationInput, PlanOperationResult } from './operationPlanner';
+export type { OperationPlan } from './operationPlanTypes';
+export {
+  buildScreenContext,
+  screenContextToPromptBlock,
+} from './screenContext';
+export { maskSensitiveText } from './piiMask';
+export {
+  parseAndGroundOperationPlan,
+  unsurePlan,
+} from './parseOperationPlan';
+export {
+  resetPlanHistory,
+  getPlanHistory,
+  pushPlanHistory,
+  isGuidanceLooping,
+} from './planHistory';
 function modeFromReady(): OnDeviceAiMode {
   return isOnDeviceAiReady() ? 'live' : 'demo';
 }

@@ -117,20 +117,28 @@ async function bindNativeEvents(): Promise<void> {
       ) {
         return;
       }
+      const mode: AndroidAssistGuidance['mode'] =
+        event.mode === 'live'
+          ? 'live'
+          : event.mode === 'demo'
+            ? 'demo'
+            : 'offline';
       const guidance: AndroidAssistGuidance = {
         stepId: event.stepId,
         stageId: event.stageId,
         displayText: event.displayText,
         voiceText: event.voiceText,
-        mode: event.mode === 'demo' ? 'demo' : 'offline',
+        mode,
         ocrTextPreview:
           event.text.length > 120 ? `${event.text.slice(0, 120)}…` : event.text,
         at: event.timestamp,
       };
-      // Prefer native structured text; keep demo honesty.
       setState({
         lastGuidance: guidance,
-        statusMessage: '画面の文字が変わったので案内を更新しました（デモ判定）。',
+        statusMessage:
+          mode === 'live'
+            ? '画面の文字が変わったので案内を更新しました（端末内AI）。'
+            : '画面の文字が変わったので案内を更新しました（デモ判定）。',
       });
     }),
   );

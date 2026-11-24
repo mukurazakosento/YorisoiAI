@@ -18,6 +18,12 @@ import {
   isAndroidDialogAccessibilityEnabled,
   openAndroidDialogAccessibilitySettings,
 } from '../services/androidAssist/dialogAccessibility';
+import {
+  ANDROID_NATIVE_MODEL,
+  MODEL_CONSENT_EXPLAIN_JA,
+  getOnDeviceAiBanner,
+  initOnDeviceAi,
+} from '../services/onDeviceAi';
 import { SPEECH_MUTE_HELP, stopSpeaking } from '../services/speech';
 import { SPEECH_RATE_OPTIONS } from '../types/settings';
 import type { RootStackParamList } from '../types/navigation';
@@ -27,14 +33,60 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Settings'>;
 export function SettingsScreen({ navigation }: Props) {
   const { settings, updateSettings, fontSize } = useSettings();
   const [a11yOn, setA11yOn] = useState(false);
+  const [aiBanner, setAiBanner] = useState(getOnDeviceAiBanner());
+  const [llmBusy, setLlmBusy] = useState(false);
+  const [llmNote, setLlmNote] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
       if (Platform.OS === 'android') {
         setA11yOn(isAndroidDialogAccessibilityEnabled());
       }
+      setAiBanner(getOnDeviceAiBanner());
     }, []),
   );
+
+  const tryInstallOnDeviceModel = async () => {
+    if (Platform.OS !== 'android' || llmBusy) {
+      return;
+    }
+    setLlmBusy(true);
+    setLlmNote(null);
+    try {
+      const llm = await import('yorisoi-on-device-llm');
+      if (!llm.isNativeOnDeviceLlmLinked()) {
+        setLlmNote('このビルドでは端末内AIを入れられません（EAS Androidが必要）。');
+        return;
+      }
+      llm.setNativeLlmDownloadConsent(true);
+      const status = llm.getNativeLlmStatus();
+      if (!status.storageOk && !status.modelPresent) {
+        setLlmNote('空き容量が足りません（約550MB＋余裕）。');
+        return;
+      }
+      if (!status.modelPresent) {
+        setLlmNote('モデルをダウンロードしています…中断は再実行で再開できます。');
+        await llm.startNativeLlmDownload();
+      }
+      await llm.loadNativeLlmModel();
+      await initOnDeviceAi({ force: true });
+      setAiBanner(getOnDeviceAiBanner());
+      setLlmNote(
+        aiBanner.connected || getOnDeviceAiBanner().connected
+          ? '端末内AIの準備ができました。'
+          : 'モデルはありますが接続確認に失敗しました（AI未接続のまま）。',
+      );
+    } catch (e) {
+      setLlmNote(
+        e instanceof Error
+          ? e.message
+          : '端末内AIの準備に失敗しました（AI未接続）。',
+      );
+    } finally {
+      setLlmBusy(false);
+      setAiBanner(getOnDeviceAiBanner());
+    }
+  };
 
   return (
     <Screen contentStyle={styles.content}>
@@ -97,6 +149,35 @@ export function SettingsScreen({ navigation }: Props) {
       </View>
 
       <View style={styles.links}>
+        {Platform.OS === 'android' ? (
+          <>
+            <Text
+              style={[styles.a11yHint, { fontSize: fontSize(baseFontSizes.caption) }]}
+              numberOfLines={2}
+            >
+              {aiBanner.connected
+                ? aiBanner.message
+                : `${ANDROID_NATIVE_MODEL.displayName}（約550MB・${ANDROID_NATIVE_MODEL.license}）。${MODEL_CONSENT_EXPLAIN_JA.slice(0, 36)}…`}
+            </Text>
+            {!aiBanner.connected ? (
+              <PrimaryButton
+                label={llmBusy ? '端末内AIを準備中…' : '端末内AIモデルに同意して入れる'}
+                variant="secondary"
+                onPress={() => {
+                  void tryInstallOnDeviceModel();
+                }}
+              />
+            ) : null}
+            {llmNote ? (
+              <Text
+                style={[styles.a11yHint, { fontSize: fontSize(baseFontSizes.caption) }]}
+                numberOfLines={2}
+              >
+                {llmNote}
+              </Text>
+            ) : null}
+          </>
+        ) : null}
         {Platform.OS === 'android' ? (
           <PrimaryButton
             label={

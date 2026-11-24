@@ -45,9 +45,11 @@ assert.match(webllmNativeStub, /return null/);
 assert.match(webllmNativeStub, /ネイティブ/);
 
 const nativeScaffold = read('src/services/onDeviceAi/nativeScaffold.ts');
-assert.match(nativeScaffold, /llama\.cpp|ExecuTorch/);
+assert.match(nativeScaffold, /mediapipe|MediaPipe|yorisoi-on-device-llm|Gemma/i);
+assert.match(nativeScaffold, /createNativeLlamaEngine/);
+assert.match(nativeScaffold, /AI未接続|プローブ|probe/);
+// Must not claim ready without linked module / probe
 assert.match(nativeScaffold, /return null/);
-assert.match(nativeScaffold, /偽/);
 
 const consultation = read('src/screens/ConsultationScreen.tsx');
 assert.match(consultation, /classifyIntent/);
@@ -77,7 +79,7 @@ const config = read('src/constants/config.ts');
 assert.match(config, /onDeviceAiEnabled/);
 assert.match(config, /legacyCloudAiEnabled/);
 assert.match(config, /EXPO_PUBLIC_ON_DEVICE_AI/);
-assert.match(config, /Llama-3\.2-1B-Instruct/);
+assert.match(config, /gemma-3-1b-it-int4|Llama-3\.2-1B-Instruct/);
 
 const appTsx = read('App.tsx');
 assert.match(appTsx, /initOnDeviceAi/);
