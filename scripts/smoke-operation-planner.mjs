@@ -29,6 +29,14 @@ assert.match(llmModule, /LlmInference/);
 assert.match(llmModule, /loadAndProbe/);
 assert.match(llmModule, /probeOk/);
 assert.doesNotMatch(llmModule, /imageBase64|screenshotBytes/);
+// MediaPipe GenAI API: generateResponse(inputText), not generate(...)
+assert.match(llmModule, /created\.generateResponse\(/);
+assert.match(llmModule, /eng\.generateResponse\(/);
+assert.doesNotMatch(llmModule, /created\.generate\(/);
+assert.doesNotMatch(llmModule, /eng\.generate\(/);
+// Wrapper keeps 1-arg generate(prompt) for AssistLlmBridge reflection
+assert.match(llmModule, /fun generate\(prompt: String\): Result<String>/);
+assert.doesNotMatch(llmModule, /fun generate\(prompt: String,\s*maxTokens/);
 
 const downloader = read(
   'modules/yorisoi-on-device-llm/android/src/main/java/expo/modules/yorisoiondevicellm/LlmModelDownloader.kt',
@@ -42,6 +50,7 @@ const bridge = read(
 );
 assert.match(bridge, /OnDeviceLlmEngine/);
 assert.match(bridge, /isReady/);
+assert.match(bridge, /getMethod\("generate",\s*String::class\.java\)/);
 
 const nativePlanner = read(
   'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistOperationPlanner.kt',
