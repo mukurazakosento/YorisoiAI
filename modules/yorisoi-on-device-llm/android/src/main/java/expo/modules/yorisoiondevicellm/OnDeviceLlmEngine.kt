@@ -148,7 +148,7 @@ object OnDeviceLlmEngine {
             .build()
         val created = LlmInference.createFromOptions(context.applicationContext, options)
         inference = created
-        val probe = created.generate("Reply with exactly: OK")
+        val probe = created.generateResponse("Reply with exactly: OK")
         val trimmed = probe.trim()
         if (trimmed.isEmpty()) {
           unloadLocked()
@@ -176,7 +176,8 @@ object OnDeviceLlmEngine {
     }
   }
 
-  fun generate(prompt: String, maxTokens: Int = 512): Result<String> {
+  /** 1-arg signature required for AssistLlmBridge reflection (`generate(String)`). */
+  fun generate(prompt: String): Result<String> {
     synchronized(lock) {
       val eng = inference
       if (eng == null || !probeOk.get()) {
@@ -184,9 +185,8 @@ object OnDeviceLlmEngine {
       }
       return try {
         val safe = LlmSecretRedactor.redact(prompt)
-        // MediaPipe generate uses model maxTokens from options; recreate if needed is heavy.
-        // Keep prompt-only text path.
-        val out = eng.generate(safe)
+        // MediaPipe maxTokens comes from LlmInferenceOptions; keep prompt-only text path.
+        val out = eng.generateResponse(safe)
         Result.success(out.trim())
       } catch (e: Exception) {
         lastError = e.message
