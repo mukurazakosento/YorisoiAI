@@ -27,6 +27,14 @@ export {
 } from './guidanceFromOcr';
 
 export {
+  isVagueGuidanceText,
+  rejectOrRewriteVagueGuidance,
+  buildConcreteOpsStep,
+  formatScrollInstruction,
+  formatTapInstruction,
+} from './concreteGuidance';
+
+export {
   ASSIST_INTERVAL_MAX_MS,
   ASSIST_INTERVAL_MIN_MS,
   OPS_ASSIST_INTERVAL_MS,

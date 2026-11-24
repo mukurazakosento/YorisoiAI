@@ -1,3 +1,10 @@
+import {
+  formatScrollInstruction,
+  formatTapInstruction,
+  isVagueGuidanceText,
+  rejectOrRewriteVagueGuidance,
+  estimateRegionFromOcr,
+} from '../androidAssist/concreteGuidance';
 import type {
   OperationPlan,
   OperationPlanActionKind,
@@ -69,11 +76,14 @@ export function unsurePlan(stage = 'unsure'): OperationPlan {
     nextAction: '状況を教えてもらう',
     targetButtonText: null,
     approximatePosition: null,
+    screenRegion: null,
+    scrollDirection: null,
+    lookFor: null,
     why: '根拠となるボタンや文字を確認できない',
     confidence: 0.2,
     displayText: UNSURE_DISPLAY,
     voiceText: UNSURE_VOICE,
-    clarifyingQuestion: 'いま画面に何と書いてありますか？',
+    clarifyingQuestion: 'いま画面の上・中央・下のどこに文字がありますか？',
     expectNextScreen: '利用者の説明待ち',
     requiresUserConfirm: false,
     stepId: `unsure-${stage}`,
@@ -82,7 +92,7 @@ export function unsurePlan(stage = 'unsure'): OperationPlan {
 
 /**
  * Parse model JSON and ground actions in OCR/UI evidence.
- * Hallucinated button targets → unsure / ask.
+ * Hallucinated / vague outputs → rewrite or ask.
  */
 export function parseAndGroundOperationPlan(
   raw: string,
@@ -97,6 +107,8 @@ export function parseAndGroundOperationPlan(
 
   const targetRaw = asString(parsed.targetButtonText || parsed.target_button_text);
   const target = targetRaw ? maskSensitiveText(targetRaw).slice(0, 40) : null;
+  const lookForRaw = asString(parsed.lookFor || parsed.look_for);
+  const lookFor = lookForRaw ? maskSensitiveText(lookForRaw).slice(0, 40) : null;
   const evidenceBlob = [
     ctx.ocrText,
     ctx.a11yText,
@@ -105,25 +117,36 @@ export function parseAndGroundOperationPlan(
     ...ctx.uiElements.map((e) => e.label),
   ].join(' ');
 
-  const actionKind = normalizeActionKind(parsed.actionKind || parsed.action_kind);
+  let actionKind = normalizeActionKind(parsed.actionKind || parsed.action_kind);
   const confidence = Math.min(
     1,
     Math.max(0, asNumber(parsed.confidence, 0.4)),
   );
 
+  // Target named but not on screen → scroll (default 下へ), not hallucinated tap
   if (
-    (actionKind === 'tap' || actionKind === 'type') &&
     target &&
+    (actionKind === 'tap' || actionKind === 'type') &&
     !labelGrounded(target, ctx.evidenceLabels, evidenceBlob)
   ) {
+    const scroll = formatScrollInstruction(target, '下へ');
     return {
-      ...unsurePlan('ungrounded-target'),
-      screenDescription: maskSensitiveText(
-        asString(parsed.screenDescription || parsed.screen_description, '画面'),
-      ).slice(0, 80),
-      clarifyingQuestion: target
-        ? `「${target}」は画面に見当たりません。どれを押しますか？`
-        : '次に押す場所を一つ教えてください。',
+      ...unsurePlan('scroll-for-target'),
+      stage: asString(parsed.stage, 'scroll'),
+      actionKind: 'scroll',
+      nextAction: scroll.displayText,
+      targetButtonText: target,
+      screenRegion: null,
+      scrollDirection: '下へ',
+      lookFor: target,
+      confidence: Math.min(confidence, 0.7),
+      displayText: scroll.displayText,
+      voiceText: scroll.voiceText,
+      clarifyingQuestion: null,
+      expectNextScreen: `「${target}」が見える画面`,
+      requiresUserConfirm: false,
+      stepId: `scroll-for-${target.slice(0, 12)}`.replace(/\s+/g, '-'),
+      why: '対象ラベルが画面に無いためスクロール案内',
     };
   }
 
@@ -132,7 +155,9 @@ export function parseAndGroundOperationPlan(
       ...unsurePlan('low-confidence'),
       clarifyingQuestion:
         asString(parsed.clarifyingQuestion || parsed.clarifying_question) ||
-        'やりたいことに近いボタンはどれですか？',
+        (ctx.evidenceLabels[0] && ctx.evidenceLabels[1]
+          ? `「${ctx.evidenceLabels[0]}」と「${ctx.evidenceLabels[1]}」のどちらですか？`
+          : '画面の上・中央・下のどこに押す文字がありますか？'),
     };
   }
 
@@ -146,33 +171,109 @@ export function parseAndGroundOperationPlan(
       pos = { x, y };
     }
   }
-  // Prefer UI element position when target matches.
   if (target) {
-    const hit = ctx.uiElements.find((e) => e.label.includes(target) || target.includes(e.label));
+    const hit = ctx.uiElements.find(
+      (e) => e.label.includes(target) || target.includes(e.label),
+    );
     if (hit?.x != null && hit?.y != null) {
       pos = { x: hit.x, y: hit.y };
     }
   }
 
-  const displayText = maskSensitiveText(
+  let screenRegion = asString(parsed.screenRegion || parsed.screen_region) || null;
+  if (!screenRegion && target && ctx.ocrText.includes(target)) {
+    screenRegion = estimateRegionFromOcr(ctx.ocrText, target).region;
+  }
+  if (!screenRegion && pos) {
+    screenRegion =
+      pos.y < 0.33 ? '上' : pos.y > 0.66 ? '下' : pos.x < 0.33 ? '左' : pos.x > 0.66 ? '右' : '中央';
+  }
+
+  let scrollDirection = asString(
+    parsed.scrollDirection || parsed.scroll_direction,
+  ) as '上へ' | '下へ' | '';
+  if (scrollDirection !== '上へ' && scrollDirection !== '下へ') {
+    scrollDirection = '';
+  }
+
+  let displayText = maskSensitiveText(
     asString(parsed.displayText || parsed.display_text) ||
       asString(parsed.nextAction || parsed.next_action) ||
       UNSURE_DISPLAY,
   ).slice(0, 120);
-  const voiceText = maskSensitiveText(
+  let voiceText = maskSensitiveText(
     asString(parsed.voiceText || parsed.voice_text) || displayText,
   ).slice(0, 240);
-  const nextAction = maskSensitiveText(
+  let nextAction = maskSensitiveText(
     asString(parsed.nextAction || parsed.next_action) || displayText,
   ).slice(0, 80);
   const stage = asString(parsed.stage, 'unknown').slice(0, 40) || 'unknown';
+
+  // Concrete rewrite for vague LLM copy
+  if (isVagueGuidanceText(`${displayText}\n${voiceText}`)) {
+    if (actionKind === 'scroll' || scrollDirection) {
+      const scroll = formatScrollInstruction(
+        lookFor || target || '目的の項目',
+        (scrollDirection || '下へ') as '上へ' | '下へ',
+      );
+      displayText = scroll.displayText;
+      voiceText = scroll.voiceText;
+      nextAction = scroll.displayText;
+      actionKind = 'scroll';
+      scrollDirection = scrollDirection || '下へ';
+    } else if (target && labelGrounded(target, ctx.evidenceLabels, evidenceBlob)) {
+      const region =
+        (screenRegion as '上' | '下' | '左' | '右' | '中央') ||
+        estimateRegionFromOcr(ctx.ocrText, target).region;
+      const tap = formatTapInstruction(
+        { label: target, region, ordinal: null },
+        lookFor ?? undefined,
+      );
+      displayText = tap.displayText;
+      voiceText = tap.voiceText;
+      nextAction = tap.displayText;
+      screenRegion = region;
+      actionKind = actionKind === 'confirm_with_user' ? 'confirm_with_user' : 'tap';
+    } else {
+      const fixed = rejectOrRewriteVagueGuidance({
+        displayText,
+        voiceText,
+        ocrText: evidenceBlob,
+        preferredLabels: ctx.evidenceLabels,
+        scrollTargetLabel: lookFor || target || undefined,
+        goalSummary: ctx.goalSummary,
+      });
+      displayText = fixed.displayText;
+      voiceText = fixed.voiceText;
+      nextAction = fixed.displayText;
+      if (fixed.actionKind === 'scroll') {
+        actionKind = 'scroll';
+        scrollDirection = '下へ';
+      } else if (fixed.actionKind === 'ask') {
+        actionKind = 'ask';
+      } else if (fixed.actionKind === 'tap') {
+        actionKind = 'tap';
+      }
+    }
+  } else if (actionKind === 'tap' && target && screenRegion && !displayText.includes(target)) {
+    // Ensure quoted label + region even when not flagged vague
+    const tap = formatTapInstruction(
+      {
+        label: target,
+        region: screenRegion as '上' | '下' | '左' | '右' | '中央',
+        ordinal: null,
+      },
+      lookFor ?? undefined,
+    );
+    displayText = tap.displayText;
+    voiceText = tap.voiceText;
+  }
 
   const requiresUserConfirm =
     parsed.requiresUserConfirm === true ||
     parsed.requires_user_confirm === true ||
     SENSITIVE_ACTION_RE.test(`${nextAction}${target ?? ''}${displayText}`);
 
-  // Never instruct the app to auto-perform sensitive actions.
   const safeKind =
     requiresUserConfirm && actionKind === 'tap' ? 'confirm_with_user' : actionKind;
 
@@ -189,6 +290,9 @@ export function parseAndGroundOperationPlan(
     nextAction,
     targetButtonText: target,
     approximatePosition: pos,
+    screenRegion,
+    scrollDirection: scrollDirection || null,
+    lookFor,
     why: maskSensitiveText(asString(parsed.why, '')).slice(0, 120),
     confidence,
     displayText,
