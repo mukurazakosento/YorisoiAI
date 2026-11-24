@@ -1,0 +1,181 @@
+package expo.modules.yorisoiandroidassist
+
+import org.json.JSONObject
+
+/**
+ * Native operation-support planner.
+ * Uses on-device LLM when [AssistLlmBridge.isReady]; otherwise heuristic rules.
+ * Actions are advice only — never auto-tap / send / call / purchase.
+ */
+object AssistOperationPlanner {
+  data class ScreenSnap(
+    val goalSummary: String,
+    val ocrText: String,
+    val a11yText: String = "",
+    val packageName: String = "",
+    val appName: String = "",
+    val dialogPresent: Boolean = false,
+    val dialogButtons: List<String> = emptyList(),
+    val lastGuidedAction: String = "",
+    val userAnswer: String = "",
+    val previousOcr: String = "",
+  )
+
+  private val recentStepIds = ArrayDeque<String>()
+  private const val MAX_HISTORY = 8
+
+  fun resetHistory() {
+    recentStepIds.clear()
+  }
+
+  fun plan(
+    featureId: String,
+    snap: ScreenSnap,
+    ocrChanged: Boolean,
+  ): AssistGuidanceRules.Step {
+    if (featureId != "operationSupport") {
+      return AssistGuidanceRules.buildNextStep(featureId, snap.goalSummary, snap.ocrText)
+    }
+
+    val safeOcr = AssistSecretRedactor.forPublicText(snap.ocrText)
+    val safeA11y = AssistSecretRedactor.forPublicText(snap.a11yText)
+    val evidence = (safeOcr + " " + safeA11y).trim()
+
+    if (evidence.isEmpty()) {
+      return AssistGuidanceRules.unreadableStep()
+    }
+
+    if (AssistLlmBridge.isReady()) {
+      val llmStep = tryLlmPlan(snap, evidence)
+      if (llmStep != null) {
+        return antiLoop(llmStep, ocrChanged)
+      }
+    }
+
+    return antiLoop(
+      AssistGuidanceRules.buildNextStep(featureId, snap.goalSummary, evidence),
+      ocrChanged,
+    )
+  }
+
+  private fun antiLoop(
+    step: AssistGuidanceRules.Step,
+    ocrChanged: Boolean,
+  ): AssistGuidanceRules.Step {
+    if (!ocrChanged) {
+      val sameCount = recentStepIds.count { it == step.stepId }
+      if (sameCount >= 2) {
+        val ask =
+          AssistGuidanceRules.Step(
+            stepId = "anti-loop-ask",
+            stageId = "anti-loop",
+            displayText = "同じ案内が続いています。次に押す場所を一つ教えてください。",
+            voiceText =
+              "同じ案内が続いています。次に押す場所を一つだけ教えてください。代わりには押しません。",
+            mode = step.mode,
+          )
+        pushHistory(ask.stepId)
+        return ask
+      }
+    }
+    pushHistory(step.stepId)
+    return step
+  }
+
+  private fun pushHistory(stepId: String) {
+    recentStepIds.addLast(stepId)
+    while (recentStepIds.size > MAX_HISTORY) {
+      recentStepIds.removeFirst()
+    }
+  }
+
+  private fun tryLlmPlan(snap: ScreenSnap, evidence: String): AssistGuidanceRules.Step? {
+    val prompt =
+      buildString {
+        appendLine("あなたは高齢者向けスマホ支援の操作計画です。JSONのみ。自動操作禁止。")
+        appendLine("根拠に無いボタンは出さない。不明なら displayText に「画面を判断できませんでした」。")
+        appendLine(
+          """形式: {"stage":"","targetButtonText":null,"confidence":0.0,"displayText":"","voiceText":"","stepId":"","requiresUserConfirm":false}""",
+        )
+        appendLine("目標: ${AssistSecretRedactor.forPublicText(snap.goalSummary)}")
+        appendLine("アプリ: ${snap.appName} / ${snap.packageName}")
+        appendLine("ダイアログ: ${snap.dialogPresent} ボタン=${snap.dialogButtons.joinToString(",")}")
+        appendLine("画面文字: $evidence")
+        appendLine("直前案内: ${snap.lastGuidedAction}")
+        appendLine("利用者返答: ${snap.userAnswer}")
+      }
+
+    val raw = AssistLlmBridge.generate(prompt) ?: return null
+    return parseGrounded(raw, evidence)
+  }
+
+  private fun parseGrounded(raw: String, evidence: String): AssistGuidanceRules.Step? {
+    val jsonText = extractJson(raw) ?: return unsureStep()
+    return try {
+      val obj = JSONObject(jsonText)
+      val target = obj.optString("targetButtonText", "").trim()
+      val confidence = obj.optDouble("confidence", 0.4)
+      var display =
+        AssistSecretRedactor.forPublicText(obj.optString("displayText", "").trim())
+      var voice =
+        AssistSecretRedactor.forPublicText(obj.optString("voiceText", display).trim())
+      val stage = obj.optString("stage", "llm").ifBlank { "llm" }
+      var stepId = obj.optString("stepId", "").ifBlank { "llm-$stage" }
+      val requiresConfirm = obj.optBoolean("requiresUserConfirm", false)
+
+      if (display.isBlank()) {
+        return unsureStep()
+      }
+      if (confidence < 0.35) {
+        return unsureStep()
+      }
+      if (target.isNotEmpty() && !evidence.replace("\\s+".toRegex(), "").contains(target.replace("\\s+".toRegex(), ""))) {
+        return unsureStep(
+          "「$target」は画面に見当たりません。どれを押しますか？",
+        )
+      }
+      if (requiresConfirm || SENSITIVE.containsMatchIn(display + target)) {
+        display = "確認してから進めてください。$display".take(120)
+        voice =
+          "送信や許可の変更は、ご自身で確認してから行ってください。$voice 代わりには操作しません。"
+        stepId = "$stepId-confirm"
+      }
+
+      AssistGuidanceRules.Step(
+        stepId = stepId.take(64),
+        stageId = stage.take(40),
+        displayText = display.take(120),
+        voiceText = voice.take(240),
+        mode = "live",
+      )
+    } catch (_: Exception) {
+      unsureStep()
+    }
+  }
+
+  private fun unsureStep(extra: String? = null): AssistGuidanceRules.Step {
+    val display = extra ?: "画面を判断できませんでした"
+    return AssistGuidanceRules.Step(
+      stepId = "unsure-llm",
+      stageId = "unsure",
+      displayText = display.take(120),
+      voiceText =
+        if (extra != null) {
+          "$extra 代わりには操作しません。"
+        } else {
+          "画面を判断できませんでした。もう一度画面を見せるか、やりたいことを短く教えてください。代わりには操作しません。"
+        },
+      mode = "live",
+    )
+  }
+
+  private fun extractJson(raw: String): String? {
+    val start = raw.indexOf('{')
+    val end = raw.lastIndexOf('}')
+    if (start < 0 || end <= start) return null
+    return raw.substring(start, end + 1)
+  }
+
+  private val SENSITIVE =
+    Regex("送信|送る|発信|購入|注文|決済|支払い|許可する|許可しない|削除|アンインストール")
+}

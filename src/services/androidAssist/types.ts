@@ -30,8 +30,8 @@ export type AndroidAssistGuidance = {
   stageId?: string;
   displayText: string;
   voiceText: string;
-  /** Never "live" while native Llama is disconnected. */
-  mode: 'demo' | 'offline';
+  /** "live" only when on-device LLM probe succeeded and plan came from inference. */
+  mode: 'demo' | 'offline' | 'live';
   ocrTextPreview: string;
   at: number;
 };

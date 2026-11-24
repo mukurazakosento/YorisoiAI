@@ -48,7 +48,8 @@ assert.match(notifier, /ACTION_RESUME/);
 assert.match(notifier, /ACTION_STOP/);
 
 const nativeScaffold = read('src/services/onDeviceAi/nativeScaffold.ts');
-assert.match(nativeScaffold, /return null/);
+assert.match(nativeScaffold, /createNativeLlamaEngine/);
+assert.match(nativeScaffold, /yorisoi-on-device-llm|MediaPipe|mediapipe/i);
 
 const assistUrl = pathToFileURL(
   path.join(root, 'src/services/androidAssist/index.ts'),

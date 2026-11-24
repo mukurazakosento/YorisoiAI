@@ -43,14 +43,15 @@ const legacyCloudAiEnabled =
 
 const onDeviceModelId =
   readPublicEnv('EXPO_PUBLIC_ON_DEVICE_MODEL_ID') ||
-  'Llama-3.2-1B-Instruct-q4f16_1-MLC';
+  'gemma-3-1b-it-int4';
 
 export const appConfig = {
   appName: 'よりそいAI',
-  appVersion: '0.13.0-android-assist',
+  appVersion: '0.14.0-on-device-llm',
   aiModelKeys: {
-    /** WebLLM / 将来ネイティブで使うモデル ID（秘密ではない） */
+    /** WebLLM 既定は別 ID 可。ネイティブ既定は Gemma 3 1B int4（秘密ではない） */
     default: onDeviceModelId,
+    webllmDefault: 'Llama-3.2-1B-Instruct-q4f16_1-MLC',
     grounding: 'optional-cloud-grounding',
   },
   firebase: {

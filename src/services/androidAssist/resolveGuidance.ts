@@ -44,7 +44,7 @@ export type ResolveGuidanceResult = {
     stageId: string;
     displayText: string;
     voiceText: string;
-    mode: 'demo';
+    mode: 'demo' | 'live' | 'offline';
   } | null;
   pendingPopupFingerprint: string | null;
   popupStreak: number;

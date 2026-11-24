@@ -65,7 +65,7 @@ assert.match(ocrIndex, /recognizeTextFromImageUri|pickAndRecognizeScreenshot/);
 assert.match(ocrIndex, /deleteTempImageUri/);
 
 const packageJson = JSON.parse(read('package.json'));
-assert.equal(packageJson.version, '0.13.0');
+assert.match(packageJson.version, /^0\.1[3-9]\./);
 assert.match(packageJson.scripts['smoke:capture'], /smoke-capture-phase-d/);
 
 const readme = read('README.md');
@@ -81,7 +81,7 @@ assert.match(agents, /capture|画面収録/);
 assert.match(agents, /smoke:capture/);
 
 const config = read('src/constants/config.ts');
-assert.match(config, /0\.13\.0-android-assist/);
+assert.match(config, /0\.14\.0-on-device-llm|0\.13\.0-android-assist/);
 
 // --- Runtime: capability honesty + confirmed-text-only summary ---
 const captureUrl = pathToFileURL(

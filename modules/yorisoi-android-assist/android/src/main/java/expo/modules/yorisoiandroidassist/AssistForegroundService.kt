@@ -481,6 +481,25 @@ class AssistForegroundService : Service() {
       return null
     }
 
+    // operationSupport: on-device LLM planner when probe-ready; else heuristics.
+    if (featureId == "operationSupport") {
+      val popup = AssistPopupDetector.detect(normalized)
+      return AssistOperationPlanner.plan(
+        featureId = featureId,
+        snap =
+          AssistOperationPlanner.ScreenSnap(
+            goalSummary = goalSummary,
+            ocrText = normalized,
+            a11yText = "",
+            dialogPresent = popup != null,
+            dialogButtons = popup?.buttons.orEmpty(),
+            lastGuidedAction = lastGuidance,
+            previousOcr = if (ocrChanged) "" else lastOcrText,
+          ),
+        ocrChanged = ocrChanged,
+      )
+    }
+
     return AssistGuidanceRules.buildNextStep(
       featureId = featureId,
       goalSummary = goalSummary,
@@ -588,6 +607,7 @@ class AssistForegroundService : Service() {
     AssistProjectionHolder.clearAll()
     AssistDialogTextHolder.setSessionActive(false)
     AssistSafetySession.disarm()
+    AssistOperationPlanner.resetHistory()
 
     tts?.stop()
     AssistNotifier.cancelGuidance(this)

@@ -58,6 +58,21 @@ object AssistGuidanceRules {
     if (looksLikePhoneGoal(goal)) {
       return phoneStep(o, raw)
     }
+    if (looksLikeEmailGoal(goal)) {
+      return emailStep(o, raw)
+    }
+    if (looksLikeBrowserGoal(goal)) {
+      return browserStep(o, raw)
+    }
+    if (looksLikeShoppingGoal(goal)) {
+      return shoppingStep(o, raw)
+    }
+    if (looksLikePhotoPickerGoal(goal)) {
+      return photoPickerStep(o, raw)
+    }
+    if (looksLikeInstallGoal(goal)) {
+      return installStep(o, raw)
+    }
     if (looksLikeSettingsGoal(goal)) {
       return settingsStep(o, raw)
     }
@@ -117,8 +132,31 @@ object AssistGuidanceRules {
   }
 
   private fun looksLikeSettingsGoal(g: String): Boolean {
-    return g.contains("設定") || g.contains("通知") || g.contains("アプリを入れ") ||
-      g.contains("インストール") || g.contains("アンインストール")
+    return g.contains("設定") || g.contains("通知")
+  }
+
+  private fun looksLikeEmailGoal(g: String): Boolean {
+    return g.contains("メール") || g.contains("gmail") || g.contains("メールを送")
+  }
+
+  private fun looksLikeBrowserGoal(g: String): Boolean {
+    return g.contains("ブラウザ") || g.contains("chrome") || g.contains("ネットで") ||
+      g.contains("ウェブ") || g.contains("ホームページ")
+  }
+
+  private fun looksLikeShoppingGoal(g: String): Boolean {
+    return g.contains("買い物") || g.contains("購入") || g.contains("注文") ||
+      g.contains("カート") || g.contains("アマゾン") || g.contains("楽天")
+  }
+
+  private fun looksLikePhotoPickerGoal(g: String): Boolean {
+    return (g.contains("写真") || g.contains("画像") || g.contains("ファイル")) &&
+      (g.contains("選") || g.contains("ピッカー") || g.contains("添付") || g.contains("ギャラリー"))
+  }
+
+  private fun looksLikeInstallGoal(g: String): Boolean {
+    return g.contains("アプリを入れ") || g.contains("インストール") ||
+      g.contains("アンインストール") || g.contains("playストア") || g.contains("ストアで")
   }
 
   /** When goal is unclear: still cite OCR, never invent LINE photo steps. */
@@ -421,6 +459,199 @@ object AssistGuidanceRules {
     )
   }
 
+  private fun emailStep(o: String, raw: String): Step {
+    return when {
+      o.contains("送信") || o.contains("送る") ->
+        step(
+          "email-confirm-send",
+          "email-pre-send",
+          "宛先と内容を確かめてから「送信」を押してください。",
+          "宛先と本文を確かめてから送信を押してください。代わりには送りません。",
+          raw,
+          listOf("送信", "送る"),
+        )
+      o.contains("作成") || o.contains("新規") || o.contains("書き込み") ->
+        step(
+          "email-compose",
+          "email-compose",
+          "宛先と用件を入れてください。",
+          "メール作成画面です。宛先と用件を入れてください。代わりには入力しません。",
+          raw,
+          listOf("作成", "新規", "宛先"),
+        )
+      o.contains("受信") || o.contains("受信トレイ") || o.contains("inbox") ->
+        step(
+          "email-inbox",
+          "email-inbox",
+          "開きたいメールを一つ選んでください。",
+          "受信トレイから、開きたいメールを一つ選んでください。",
+          raw,
+          listOf("受信", "受信トレイ"),
+        )
+      else ->
+        ocrGroundedOr(
+          raw,
+          Step(
+            stepId = "email-open",
+            stageId = "email-start",
+            displayText = "メールアプリを開いてください。",
+            voiceText = "メールアプリを開き、やりたい画面まで進めてください。",
+          ),
+        )
+    }
+  }
+
+  private fun browserStep(o: String, raw: String): Step {
+    return when {
+      o.contains("検索") || o.contains("google") || o.contains("アドレス") ->
+        step(
+          "browser-search",
+          "browser-search",
+          "調べたい言葉を入れて検索してください。",
+          "検索欄に調べたい言葉を入れてください。代わりには入力しません。",
+          raw,
+          listOf("検索", "Google"),
+        )
+      o.contains("タブ") || o.contains("ブックマーク") ->
+        step(
+          "browser-nav",
+          "browser-nav",
+          "開きたいページを一つ選んでください。",
+          "タブやブックマークから、開きたいページを一つ選んでください。",
+          raw,
+          listOf("タブ", "ブックマーク"),
+        )
+      else ->
+        ocrGroundedOr(
+          raw,
+          Step(
+            stepId = "browser-open",
+            stageId = "browser-start",
+            displayText = "ブラウザを開いてください。",
+            voiceText = "ブラウザを開き、調べたいページへ進めてください。",
+          ),
+        )
+    }
+  }
+
+  private fun shoppingStep(o: String, raw: String): Step {
+    return when {
+      o.contains("購入") || o.contains("注文を確定") || o.contains("支払い") ->
+        step(
+          "shop-confirm-pay",
+          "shop-pay",
+          "金額と届け先を確かめてから、ご自身で進めてください。",
+          "購入や支払いは、内容を確かめてからご自身で押してください。代わりには買いません。",
+          raw,
+          listOf("購入", "注文を確定", "支払い"),
+        )
+      o.contains("カート") || o.contains("かご") ->
+        step(
+          "shop-cart",
+          "shop-cart",
+          "カートの中身を確かめてください。",
+          "カートの商品を確かめてください。購入は急がなくて大丈夫です。",
+          raw,
+          listOf("カート", "かご"),
+        )
+      o.contains("検索") || o.contains("商品") ->
+        step(
+          "shop-browse",
+          "shop-browse",
+          "見たい商品を一つ選んでください。",
+          "一覧から見たい商品を一つ選んでください。",
+          raw,
+          listOf("検索", "商品"),
+        )
+      else ->
+        ocrGroundedOr(
+          raw,
+          Step(
+            stepId = "shop-open",
+            stageId = "shop-start",
+            displayText = "買い物アプリを開いてください。",
+            voiceText = "買い物アプリを開き、見たい商品まで進めてください。購入はご自身で確認してから。",
+          ),
+        )
+    }
+  }
+
+  private fun photoPickerStep(o: String, raw: String): Step {
+    return when {
+      o.contains("アルバム") || o.contains("ギャラリー") || o.contains("最近の項目") ||
+        o.contains("すべての写真") || o.contains("ファイル") || o.contains("ドキュメント") ->
+        step(
+          "picker-choose",
+          "picker-grid",
+          "送りたい写真やファイルを一つ選んでください。",
+          "一覧から、使いたい写真やファイルを一つだけ選んでください。",
+          raw,
+          listOf("アルバム", "ギャラリー", "最近の項目", "ファイル", "ドキュメント"),
+        )
+      o.contains("許可") ->
+        step(
+          "picker-permission",
+          "picker-permission",
+          "写真へのアクセスを、必要な方だけ選んでください。",
+          "写真やファイルへの許可画面です。必要な方を、ご自身で選んでください。代わりには押しません。",
+          raw,
+          listOf("許可する", "許可しない", "写真"),
+        )
+      else ->
+        ocrGroundedOr(
+          raw,
+          Step(
+            stepId = "picker-open",
+            stageId = "picker-start",
+            displayText = "写真やファイルを選ぶ画面を開いてください。",
+            voiceText = "写真やファイルを選ぶ画面を開いて、一つ選んでください。",
+          ),
+        )
+    }
+  }
+
+  private fun installStep(o: String, raw: String): Step {
+    return when {
+      o.contains("アンインストール") || o.contains("削除") ->
+        step(
+          "install-uninstall",
+          "install-uninstall",
+          "消してよいアプリか確かめてから進めてください。",
+          "アンインストールは取り消せないことがあります。確かめてから、ご自身で進めてください。",
+          raw,
+          listOf("アンインストール", "削除"),
+        )
+      o.contains("インストール") || o.contains("入手") || o.contains("更新") ->
+        step(
+          "install-confirm",
+          "install-confirm",
+          "アプリ名を確かめてから「インストール」を押してください。",
+          "アプリの名前を確かめてから、インストールを押してください。代わりには押しません。",
+          raw,
+          listOf("インストール", "入手", "更新"),
+        )
+      o.contains("play") || o.contains("ストア") || o.contains("検索") ->
+        step(
+          "install-search",
+          "install-store",
+          "入れたいアプリの名前を検索してください。",
+          "ストアで入れたいアプリの名前を検索し、正しいものを選んでください。",
+          raw,
+          listOf("検索", "ストア"),
+        )
+      else ->
+        ocrGroundedOr(
+          raw,
+          Step(
+            stepId = "install-open",
+            stageId = "install-start",
+            displayText = "Playストアを開いてください。",
+            voiceText = "Playストアを開き、入れたいアプリを探してください。",
+          ),
+        )
+    }
+  }
+
   private fun firstMatch(raw: String, labels: List<String>): String? {
     for (label in labels) {
       if (raw.contains(label)) {
@@ -454,6 +685,13 @@ object AssistGuidanceRules {
         "閉じる",
         "選択",
         "添付",
+        "インストール",
+        "購入",
+        "注文",
+        "カート",
+        "検索",
+        "履歴",
+        "ファイル",
       )
     return firstMatch(raw, candidates)
   }

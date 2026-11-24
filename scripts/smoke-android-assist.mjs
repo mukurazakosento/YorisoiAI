@@ -19,7 +19,7 @@ function read(rel) {
 const pkg = JSON.parse(read('package.json'));
 assert.equal(pkg.dependencies['yorisoi-android-assist'], 'file:./modules/yorisoi-android-assist');
 assert.match(pkg.scripts['smoke:android-assist'], /smoke-android-assist/);
-assert.equal(pkg.version, '0.13.0');
+assert.match(pkg.version, /^0\.1[4-9]\./);
 
 const appJson = JSON.parse(read('app.json'));
 assert.ok(

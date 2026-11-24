@@ -126,7 +126,11 @@ export async function initOnDeviceAi(options?: {
 
     if (isWebRuntime() && isWebLlmSupportedPlatform()) {
       const webEngine = await createWebLlmEngine({
-        modelId: appConfig.aiModelKeys.default,
+        modelId:
+          appConfig.aiModelKeys.default.includes('Llama') ||
+          appConfig.aiModelKeys.default.includes('MLC')
+            ? appConfig.aiModelKeys.default
+            : appConfig.aiModelKeys.webllmDefault,
         onProgress: options?.onProgress,
       });
       if (webEngine?.isReady()) {

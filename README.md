@@ -103,10 +103,15 @@ npm start
 
 - キーボードの `w` で Web プレビュー
 - WebGPU 非対応・ダウンロード失敗・初期化失敗 → **AI未接続**のまま（`mode: live` にはしません）
-- 既定モデル ID: `Llama-3.2-1B-Instruct-q4f16_1-MLC`（`EXPO_PUBLIC_ON_DEVICE_MODEL_ID` で変更可。秘密ではない）
+- Web 既定モデル ID: `Llama-3.2-1B-Instruct-q4f16_1-MLC`（`EXPO_PUBLIC_ON_DEVICE_MODEL_ID` で変更可。秘密ではない）
 - **Web では画面収録／OCR は不可**です（上記のとおり）
 
-ネイティブ実機では WebLLM は動きません。`src/services/onDeviceAi/nativeScaffold.ts` が将来の差し替え口です。
+### Android ネイティブ（MediaPipe + Gemma 3 1B）
+
+- モジュール: `modules/yorisoi-on-device-llm/`（EAS development / preview APK）
+- 設定画面で同意のうえ約 550MB をダウンロード → probe 成功時のみ **端末内AI接続**
+- 画像は渡しません。操作支援の次の一手 JSON 計画に使います（自動タップなし）
+- Cloud Agent / Expo Go では推論できません。実機での確認が必要です
 
 ## 技術構成
 
@@ -115,7 +120,7 @@ npm start
 | アプリ | React Native / Expo (SDK 58) / TypeScript |
 | ナビゲーション | React Navigation（Native Stack） |
 | 設定保存 | AsyncStorage（端末内） |
-| AI（既定） | `src/services/onDeviceAi`（WebLLM / ネイティブスキャフォールド）。未接続時はデモ明示 |
+| AI（既定） | `src/services/onDeviceAi`（Web: WebLLM / Android: MediaPipe Gemma）。未接続時はデモ明示 |
 | 画面フレーム | `src/services/capture`（利用者開始・確認済み文字のみ） |
 | Android 背面支援 | MediaProjection＋FGS（`modules/yorisoi-android-assist` / `src/services/androidAssist`） |
 | OCR | Google ML Kit 日本語（`modules/yorisoi-mlkit-ocr`、端末内のみ。背面支援も同系 ML Kit） |
