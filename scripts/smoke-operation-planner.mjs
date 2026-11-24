@@ -22,6 +22,34 @@ assert.match(nativeScaffold, /mediapipe|MediaPipe|yorisoi-on-device-llm/i);
 assert.match(nativeScaffold, /probe|プローブ/);
 assert.doesNotMatch(nativeScaffold, /偽の推論結果は返さない:\s*現状は常に null/);
 
+// R8 Missing-class fix: pin javalite, bump tasks-genai past 0.10.27 gencode, no dontwarn hack
+const onDeviceLlmGradle = read(
+  'modules/yorisoi-on-device-llm/android/build.gradle',
+);
+assert.match(
+  onDeviceLlmGradle,
+  /com\.google\.protobuf:protobuf-javalite:4\.26\.1/,
+);
+assert.match(
+  onDeviceLlmGradle,
+  /force\s+['"]com\.google\.protobuf:protobuf-javalite:4\.26\.1['"]/,
+);
+assert.match(
+  onDeviceLlmGradle,
+  /com\.google\.mediapipe:tasks-genai:0\.10\.(2[89]|3[0-9])/,
+);
+assert.doesNotMatch(onDeviceLlmGradle, /tasks-genai:0\.10\.27/);
+// Strip // comments before checking for R8 warn-ignore hacks / full protobuf-java coords
+const onDeviceLlmGradleCode = onDeviceLlmGradle
+  .split('\n')
+  .map((line) => line.replace(/\/\/.*$/, ''))
+  .join('\n');
+assert.doesNotMatch(onDeviceLlmGradleCode, /-dontwarn\b/);
+assert.doesNotMatch(
+  onDeviceLlmGradleCode,
+  /com\.google\.protobuf:protobuf-java[^l]/,
+);
+
 const llmModule = read(
   'modules/yorisoi-on-device-llm/android/src/main/java/expo/modules/yorisoiondevicellm/OnDeviceLlmEngine.kt',
 );

@@ -13,7 +13,7 @@ Android-only Expo module: **MediaPipe LLM Inference** + **Gemma 3 1B IT int4** (
 
 | Field | Value |
 | --- | --- |
-| Engine | MediaPipe Tasks GenAI (`com.google.mediapipe:tasks-genai`) |
+| Engine | MediaPipe Tasks GenAI (`com.google.mediapipe:tasks-genai:0.10.35`, protobuf-javalite 4.26.1 pinned) |
 | Model | Gemma 3 1B Instruct int4 (`.task`) |
 | Size | ~555 MB |
 | License | [Gemma Terms of Use](https://ai.google.dev/gemma/terms) |

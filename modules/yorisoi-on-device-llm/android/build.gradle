@@ -15,8 +15,31 @@ android {
   }
 }
 
+// MediaPipe tasks-genai 0.10.27 AAR embeds CLASS-retention protobuf annotations
+// (Internal$ProtoMethodMayReturnNull, Internal$ProtoNonnullApi, ProtoField,
+// ProtoPresenceBits, ProtoPresenceCheckedField) that are absent from every
+// published protobuf-javalite / protobuf-java on Maven Central through
+// 4.37.0-RC3 (verified via pom + unzip -l). R8 minifyRelease then fails with
+// Missing classes. tasks-genai 0.10.28+ ships gencode without those refs
+// (same generateResponse API). Keep an explicit javalite pin matching the
+// MediaPipe POM (4.26.1) and force it so nothing downgrades or pulls full
+// protobuf-java alongside lite. Do not suppress missing protobuf classes via
+// ProGuard/R8 warn-ignore rules — fix the resolved artifacts instead.
+configurations.configureEach {
+  resolutionStrategy {
+    force 'com.google.protobuf:protobuf-javalite:4.26.1'
+  }
+}
+
 dependencies {
   // MediaPipe LLM Inference (maintenance-mode but shipping). Text-only; no image path.
-  implementation 'com.google.mediapipe:tasks-genai:0.10.27'
+  // 0.10.35 = latest Google Maven release as of this fix; ≥0.10.28 required for R8.
+  implementation('com.google.mediapipe:tasks-genai:0.10.35') {
+    exclude group: 'com.google.protobuf', module: 'protobuf-java'
+  }
+  // Explicit align (MediaPipe POM still declares 4.26.1). Not 4.37.0-RC3 / 4.36.2:
+  // those jars were checked and still lack the five annotation classes above;
+  // newer runtime would not fix 0.10.27 gencode and risks lite binary skew.
+  implementation 'com.google.protobuf:protobuf-javalite:4.26.1'
   implementation 'androidx.core:core-ktx:1.13.1'
 }
