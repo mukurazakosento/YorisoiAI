@@ -33,12 +33,16 @@ object AssistDialogTextHolder {
   }
 
   /**
-   * Return recent dialog text if fresh (default 15s), else empty.
-   * Available to FGS OCR merge regardless of sessionActive.
+   * Return recent dialog text if fresh (default 5s), else empty.
+   * Short TTL avoids FGS re-announcing a dismissed camera/permission sheet
+   * from retained a11y text. Available regardless of sessionActive.
    */
-  fun peekRecent(maxAgeMs: Long = 15_000L): String {
+  fun peekRecent(maxAgeMs: Long = 5_000L): String {
     val age = System.currentTimeMillis() - latestAtMs
     if (age < 0 || age > maxAgeMs) {
+      if (age > maxAgeMs) {
+        clear()
+      }
       return ""
     }
     return latestText

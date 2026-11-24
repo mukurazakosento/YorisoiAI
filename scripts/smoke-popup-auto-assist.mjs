@@ -45,6 +45,7 @@ assert.match(detector, /isStable/);
 assert.match(detector, /textExplanation/);
 assert.match(detector, /locationPrecisionSheet|locationTopicSheet|正確な位置/);
 assert.match(detector, /softPermissionBody|permissionButtonCluster|今回のみ/);
+assert.match(detector, /looksLikeOwnGuidance|聞いている画面です/);
 // No auto-tap; AccessibilityService is optional text-only (session-scoped).
 assert.doesNotMatch(detector, /dispatchGesture|performGlobalAction/);
 
@@ -56,6 +57,10 @@ assert.match(a11yService, /AssistNotifier\.showGuidance/);
 assert.match(a11yService, /speakLatest|AssistTtsHelper/);
 assert.match(a11yService, /AssistPopupExplainer\.explain/);
 assert.match(a11yService, /isExplainWorthyDialog/);
+assert.match(a11yService, /isVisibleToUser/);
+assert.match(a11yService, /looksLikeOwnGuidance|聞いている画面です/);
+assert.match(a11yService, /isSafeToAnnounce|hasStrongDialogChrome/);
+assert.match(a11yService, /MAX_EVENT_AGE_MS|event\.eventTime/);
 // Always-on: must NOT gate on sessionActive / MediaProjection at runtime.
 assert.doesNotMatch(
   a11yService,
@@ -339,5 +344,24 @@ const plain = resolveAssistGuidance({
 });
 assert.ok(plain.step);
 assert.match(plain.step.displayText, /設定|Wi/);
+
+// --- Phantom camera: own guidance / notify remnant must not re-announce ---
+const phantomCamGuidance =
+  'カメラを使ってよいか聞いている画面です。ボタンは「許可しない」「一度だけ」などです。よりそいAIは代わりに押しません。';
+assert.equal(detectPopup(phantomCamGuidance), null);
+const phantomResolve = resolveAssistGuidance({
+  featureId: 'textExplanation',
+  goalSummary: 'カメラ',
+  ocrText: '',
+  a11yText: phantomCamGuidance,
+  ocrChanged: true,
+  intervalMs: TEXT_EXPLAIN_ASSIST_INTERVAL_MS,
+});
+assert.ok(phantomResolve.step);
+assert.doesNotMatch(phantomResolve.step.stageId ?? '', /permission_camera/i);
+
+// Real camera dialog still works (OCR path)
+assert.equal(cam.kind, 'PERMISSION_CAMERA');
+assert.match(camExplain.displayText, /カメラ/);
 
 console.log('smoke-popup-auto-assist: OK');

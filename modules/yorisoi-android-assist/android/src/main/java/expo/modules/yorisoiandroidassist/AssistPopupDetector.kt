@@ -36,6 +36,10 @@ object AssistPopupDetector {
       return null
     }
     val n = normalize(raw)
+    // Prior notify/TTS copy must not be treated as a live permission dialog.
+    if (looksLikeOwnGuidance(n)) {
+      return null
+    }
     if (!looksLikeDialog(n)) {
       return null
     }
@@ -290,5 +294,14 @@ object AssistPopupDetector {
 
   private fun normalize(text: String): String {
     return text.lowercase().replace("\\s+".toRegex(), "")
+  }
+
+  /** Reject re-reading our own guidance notification / TTS as a camera dialog. */
+  private fun looksLikeOwnGuidance(n: String): Boolean {
+    return n.contains("聞いている画面です") ||
+      n.contains("代わりに押しません") ||
+      n.contains("よりそいai") ||
+      n.contains("断定はしません") ||
+      n.contains("自分の目で確認してください")
   }
 }
