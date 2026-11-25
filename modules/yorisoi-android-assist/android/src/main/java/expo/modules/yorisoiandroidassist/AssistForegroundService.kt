@@ -110,7 +110,11 @@ class AssistForegroundService : Service() {
       if (!paused) {
         captureAndProcess()
       }
-      workerHandler?.postDelayed(this, intervalMs)
+      // While on uninstall go-home, re-poll by ~10s stall timeout so guidance can
+      // auto-advance to long-press without waiting a full ~20s ops cycle.
+      val delayMs =
+        AssistUninstallGuidance.nextPollDelayMs(announcedStageId, intervalMs)
+      workerHandler?.postDelayed(this, delayMs)
     }
   }
 

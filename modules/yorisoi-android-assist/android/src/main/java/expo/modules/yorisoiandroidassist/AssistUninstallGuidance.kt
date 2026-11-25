@@ -5,9 +5,16 @@ package expo.modules.yorisoiandroidassist
  * No auto-tap / auto-uninstall / auto-confirm.
  * Ban hold-duration meta-advice ("don't count seconds").
  * Early step: go from Home to the screen that shows the app to remove.
+ * go-home stall: after ~10s without OCR advance, continue to long-press guidance.
  */
 object AssistUninstallGuidance {
   val GOAL_SUMMARY = "アプリをアンインストールしたい"
+
+  /**
+   * Stall timeout on uninstall-go-home (ms). Do not wait forever for perfect home OCR.
+   * Ops cycle stays ~20s; FGS uses this as the next-poll delay while on go-home.
+   */
+  const val GO_HOME_STALL_TIMEOUT_MS = 10_000L
 
   /** Shared consequence explanation (menu + confirm). */
   const val CONSEQUENCE_VOICE =
@@ -22,9 +29,23 @@ object AssistUninstallGuidance {
     )
 
   @Volatile private var lastStageId: String = ""
+  @Volatile private var goHomeEnteredAtMs: Long = -1L
 
   fun reset() {
     lastStageId = ""
+    goHomeEnteredAtMs = -1L
+  }
+
+  /**
+   * Next capture delay: while on go-home, poll by the stall timeout (~10s)
+   * so auto-advance can fire without waiting a full ~20s ops cycle.
+   */
+  fun nextPollDelayMs(stageId: String?, defaultIntervalMs: Long): Long {
+    return if (normalizeStage(stageId) == "uninstall-go-home") {
+      minOf(defaultIntervalMs, GO_HOME_STALL_TIMEOUT_MS)
+    } else {
+      defaultIntervalMs
+    }
   }
 
   fun looksLikeUninstallGoal(goalNormalized: String): Boolean {
@@ -54,11 +75,16 @@ object AssistUninstallGuidance {
     return false
   }
 
-  fun buildStep(ocrNormalized: String, ocrRaw: String): AssistGuidanceRules.Step {
+  fun buildStep(
+    ocrNormalized: String,
+    ocrRaw: String,
+    nowMs: Long = System.currentTimeMillis(),
+  ): AssistGuidanceRules.Step {
     val o = ocrNormalized
     val prev = normalizeStage(lastStageId)
     val ocrStage = matchStageFromOcr(o)
-    val stage = resolveStage(ocrStage, prev)
+    var stage = resolveStage(ocrStage, prev)
+    stage = applyGoHomeStallTimeout(stage, nowMs)
     val step = stepFor(stage, ocrRaw, o)
     lastStageId = step.stageId
     return step
@@ -68,14 +94,17 @@ object AssistUninstallGuidance {
   fun antiLoopStep(stuckStageId: String?): AssistGuidanceRules.Step {
     val stage = normalizeStage(stuckStageId) ?: "uninstall-long-press"
     return when (stage) {
-      "uninstall-go-home" ->
+      "uninstall-go-home" -> {
+        goHomeEnteredAtMs = -1L
+        lastStageId = "uninstall-long-press"
+        val longPress = longPressStep()
         AssistGuidanceRules.Step(
           stepId = "uninstall-anti-loop-home",
-          stageId = "uninstall-go-home",
-          displayText = "ホーム画面から、消したいアプリのある画面まで行ってください。",
-          voiceText =
-            "同じ案内が続いています。ホーム画面から、消したいアプリの絵文字マークが見える画面まで進めてください。代わりには消しません。",
+          stageId = "uninstall-long-press",
+          displayText = longPress.displayText,
+          voiceText = longPress.voiceText,
         )
+      }
       "uninstall-menu" ->
         AssistGuidanceRules.Step(
           stepId = "uninstall-anti-loop-menu",
@@ -142,6 +171,26 @@ object AssistUninstallGuidance {
     }
     if (prevRank > (stageRank["uninstall-go-home"] ?: 0)) {
       return previous
+    }
+    return "uninstall-go-home"
+  }
+
+  /**
+   * If still on go-home after ~10s with no OCR advance, continue to long-press.
+   * Does not auto-tap; only advances spoken/notify guidance.
+   */
+  private fun applyGoHomeStallTimeout(stage: String, nowMs: Long): String {
+    if (stage != "uninstall-go-home") {
+      goHomeEnteredAtMs = -1L
+      return stage
+    }
+    if (goHomeEnteredAtMs < 0L) {
+      goHomeEnteredAtMs = nowMs
+      return "uninstall-go-home"
+    }
+    if (nowMs - goHomeEnteredAtMs >= GO_HOME_STALL_TIMEOUT_MS) {
+      goHomeEnteredAtMs = -1L
+      return "uninstall-long-press"
     }
     return "uninstall-go-home"
   }
