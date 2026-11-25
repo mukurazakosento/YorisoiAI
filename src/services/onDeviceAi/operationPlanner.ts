@@ -1,5 +1,9 @@
 import { buildGuidanceFromOcrText } from '../androidAssist/guidanceFromOcr';
 import {
+  buildUninstallAntiLoopStep,
+  resetUninstallGuidanceProgress,
+} from '../androidAssist/uninstallGuidance';
+import {
   getActiveOnDeviceEngine,
   isOnDeviceAiReady,
 } from './status';
@@ -8,6 +12,7 @@ import {
   isGuidanceLooping,
   pushPlanHistory,
   prunePlanHistoryForPrivacy,
+  resetPlanHistory,
 } from './planHistory';
 import { parseAndGroundOperationPlan, unsurePlan } from './parseOperationPlan';
 import type { OperationPlan } from './operationPlanTypes';
@@ -17,6 +22,12 @@ import {
   type ScreenContextInput,
 } from './screenContext';
 import { maskSensitiveText } from './piiMask';
+
+/** Reset planner + uninstall stage cursor for a new session. */
+export function resetOperationPlannerSession(): void {
+  resetPlanHistory();
+  resetUninstallGuidanceProgress();
+}
 
 export type PlanOperationInput = ScreenContextInput & {
   featureId?: 'operationSupport' | 'textExplanation' | 'safetyCheck';
@@ -105,6 +116,30 @@ function heuristicPlan(input: PlanOperationInput): OperationPlan {
   };
 }
 
+function uninstallAwareAntiLoop(plan: OperationPlan): OperationPlan {
+  const uninstallStuck =
+    plan.stepId.startsWith('uninstall-') || plan.stage.startsWith('uninstall-');
+  if (uninstallStuck) {
+    const soft = buildUninstallAntiLoopStep(plan.stage || plan.stepId);
+    return {
+      ...unsurePlan('anti-loop'),
+      stage: soft.stageId,
+      stepId: soft.stepId,
+      displayText: soft.displayText,
+      voiceText: soft.voiceText,
+      nextAction: soft.displayText,
+      actionKind: 'ask',
+      clarifyingQuestion: soft.displayText,
+    };
+  }
+  return {
+    ...unsurePlan('anti-loop'),
+    displayText: '同じ案内の繰り返しを止めます。次に押す場所を一つ教えてください。',
+    voiceText:
+      '同じ案内が続いています。次に押す場所を一つだけ教えてください。代わりには押しません。',
+  };
+}
+
 /**
  * Plan one next operation-support step.
  * LIVE only when on-device engine is ready and JSON grounds in evidence.
@@ -118,10 +153,7 @@ export async function planOperationSupport(
   if (!engine || !isOnDeviceAiReady()) {
     const plan = heuristicPlan(input);
     if (isGuidanceLooping(plan, input.ocrChanged !== false)) {
-      const ask = unsurePlan('anti-loop');
-      ask.displayText = '同じ案内の繰り返しを止めます。次に押す場所を一つ教えてください。';
-      ask.voiceText =
-        '同じ案内が続いています。次に押す場所を一つだけ教えてください。代わりには押しません。';
+      const ask = uninstallAwareAntiLoop(plan);
       pushPlanHistory(ctx, ask);
       return { plan: ask, mode: 'demo', usedEngine: false };
     }
@@ -137,12 +169,7 @@ export async function planOperationSupport(
     ]);
     let plan = parseAndGroundOperationPlan(raw, ctx);
     if (isGuidanceLooping(plan, Boolean(input.ocrChanged))) {
-      plan = {
-        ...unsurePlan('anti-loop'),
-        displayText: '画面が変わっていないようです。別の場所を試すか、状況を教えてください。',
-        voiceText:
-          '画面が変わっていないようです。別のボタンを探すか、いま見える文字を教えてください。',
-      };
+      plan = uninstallAwareAntiLoop(plan);
     }
     pushPlanHistory(ctx, plan);
     prunePlanHistoryForPrivacy();

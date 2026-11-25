@@ -26,6 +26,7 @@ object AssistOperationPlanner {
 
   fun resetHistory() {
     recentStepIds.clear()
+    AssistUninstallGuidance.reset()
   }
 
   fun plan(
@@ -62,10 +63,17 @@ object AssistOperationPlanner {
     step: AssistGuidanceRules.Step,
     ocrChanged: Boolean,
   ): AssistGuidanceRules.Step {
-    if (!ocrChanged) {
-      val sameCount = recentStepIds.count { it == step.stepId }
-      if (sameCount >= 2) {
-        val ask =
+    val sameCount = recentStepIds.count { it == step.stepId }
+    val uninstallStuck =
+      step.stepId.startsWith("uninstall-") || step.stageId.startsWith("uninstall-")
+    // Uninstall: trip even when OCR flickers; other paths keep the quiet-OCR gate.
+    val shouldTrip =
+      sameCount >= 2 && (uninstallStuck || !ocrChanged)
+    if (shouldTrip) {
+      val ask =
+        if (uninstallStuck) {
+          AssistUninstallGuidance.antiLoopStep(step.stageId).copy(mode = step.mode)
+        } else {
           AssistGuidanceRules.Step(
             stepId = "anti-loop-ask",
             stageId = "anti-loop",
@@ -74,9 +82,9 @@ object AssistOperationPlanner {
               "同じ案内が続いています。次に押す場所を一つだけ教えてください。代わりには押しません。",
             mode = step.mode,
           )
-        pushHistory(ask.stepId)
-        return ask
-      }
+        }
+      pushHistory(ask.stepId)
+      return ask
     }
     pushHistory(step.stepId)
     return step

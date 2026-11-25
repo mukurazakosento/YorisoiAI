@@ -125,9 +125,29 @@ assert.match(
 assert.match(rules, /AssistUninstallGuidance/);
 const uninstallSrc = read('src/services/androidAssist/uninstallGuidance.ts');
 assert.match(uninstallSrc, /メニューが出るまで/);
+assert.match(uninstallSrc, /ホーム画面から、消したいアプリのある画面まで/);
+assert.match(uninstallSrc, /UNINSTALL_CONSEQUENCE_VOICE|写真やメモなどが一緒に消えて/);
 assert.doesNotMatch(uninstallSrc, /hold for \d+\s*seconds?/i);
 assert.doesNotMatch(uninstallSrc, /displayText:.*\d+秒/);
 assert.doesNotMatch(uninstallSrc, /voiceText:.*\d+秒/);
+assert.doesNotMatch(
+  uninstallSrc,
+  /voiceText:[\s\S]{0,120}数えなくて|voiceText:[\s\S]{0,120}秒数は気にしなくて/,
+);
+const uninstallKt = read(
+  'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistUninstallGuidance.kt',
+);
+assert.match(uninstallKt, /ホーム画面から、消したいアプリのある画面まで/);
+assert.doesNotMatch(
+  uninstallKt,
+  /voiceText[\s\S]{0,200}数えなくて|voiceText[\s\S]{0,200}秒数は気にしなくて/,
+);
+assert.match(
+  read(
+    'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistForegroundService.kt',
+  ),
+  /uninstallQuiet|startsWith\("uninstall/,
+);
 
 // Avoid a11y/popup conflict files being rewritten for this feature
 assert.ok(
@@ -265,7 +285,10 @@ assert.match(
 const {
   looksLikeUninstallGoal,
   buildUninstallGuidanceStep,
+  buildUninstallAntiLoopStep,
+  resetUninstallGuidanceProgress,
   UNINSTALL_GOAL_SUMMARY,
+  UNINSTALL_CONSEQUENCE_VOICE,
 } = await import(
   pathToFileURL(
     path.join(root, 'src/services/androidAssist/uninstallGuidance.ts'),
@@ -274,15 +297,21 @@ const {
 assert.equal(looksLikeUninstallGoal('アプリをアンインストールしたい'), true);
 assert.equal(looksLikeUninstallGoal('アプリをインストールしたい'), false);
 assert.match(UNINSTALL_GOAL_SUMMARY, /アンインストール/);
+assert.match(UNINSTALL_CONSEQUENCE_VOICE, /メニューから削除を選ぶと/);
+assert.match(UNINSTALL_CONSEQUENCE_VOICE, /写真やメモ/);
+assert.match(UNINSTALL_CONSEQUENCE_VOICE, /残しておきたいもの/);
 
-const uninstallFind = buildGuidanceFromOcrText({
+resetUninstallGuidanceProgress();
+const uninstallGoHome = buildGuidanceFromOcrText({
   featureId: 'operationSupport',
   goalSummary: UNINSTALL_GOAL_SUMMARY,
   ocrText: '設定',
 });
-assert.match(uninstallFind.stepId, /uninstall/);
-assert.doesNotMatch(uninstallFind.stepId, /^install-/);
+assert.equal(uninstallGoHome.stepId, 'uninstall-go-home');
+assert.match(uninstallGoHome.displayText, /ホーム画面から/);
+assert.doesNotMatch(uninstallGoHome.stepId, /^install-/);
 
+resetUninstallGuidanceProgress();
 const uninstallLong = buildUninstallGuidanceStep({
   ocrNormalized: 'google電話メッセージ設定カメラ',
   ocrRaw: 'Google 電話 メッセージ 設定 カメラ',
@@ -292,12 +321,14 @@ assert.match(uninstallLong.displayText, /長押し/);
 assert.match(uninstallLong.displayText, /メニューが出るまで/);
 assert.match(uninstallLong.voiceText, /出るまで/);
 assert.doesNotMatch(uninstallLong.voiceText, /\d+秒/);
+assert.doesNotMatch(uninstallLong.voiceText, /数えなくて|秒数は気に/);
 
 const uninstallMenu = buildUninstallGuidanceStep({
   ocrNormalized: '削除アンインストールアプリ情報',
   ocrRaw: '削除 アンインストール アプリ情報',
 });
 assert.equal(uninstallMenu.stepId, 'uninstall-tap-delete');
+assert.match(uninstallMenu.voiceText, /写真やメモ|残しておきたいもの/);
 assert.match(uninstallMenu.voiceText, /確認/);
 
 const uninstallConfirm = buildUninstallGuidanceStep({
@@ -310,6 +341,21 @@ assert.match(uninstallConfirm.voiceText, /残しておきたいもの/);
 assert.match(uninstallConfirm.displayText, /キャンセル/);
 assert.match(uninstallMenu.displayText, /メニューから|取り除けます/);
 
+// Stage matching: do not regress from menu to go-home on ambiguous OCR
+const held = buildUninstallGuidanceStep({
+  ocrNormalized: 'なにか別の画面',
+  ocrRaw: 'なにか別の画面',
+  previousStageId: 'uninstall-menu',
+});
+assert.equal(held.stageId, 'uninstall-menu');
+
+const soft = buildUninstallAntiLoopStep('uninstall-long-press');
+assert.match(soft.stepId, /anti-loop/);
+assert.match(soft.voiceText, /削除|アンインストール/);
+assert.doesNotMatch(soft.voiceText, /数えなくて|秒数は気に/);
+
+resetUninstallGuidanceProgress();
+resetPlanHistory();
 const uninstallPlan = await planOperationSupport({
   goalSummary: 'アプリを消したい',
   ocrText: 'Google 電話 設定',
@@ -317,6 +363,22 @@ const uninstallPlan = await planOperationSupport({
 });
 assert.equal(uninstallPlan.mode, 'demo');
 assert.match(uninstallPlan.plan.stepId, /uninstall/);
+
+// Anti-loop fires for uninstall even when OCR keeps "changing" slightly
+resetPlanHistory();
+resetUninstallGuidanceProgress();
+const homeOcr = 'Google 電話 メッセージ 設定 カメラ';
+let lastUninstallPlan = null;
+for (let i = 0; i < 4; i += 1) {
+  lastUninstallPlan = await planOperationSupport({
+    goalSummary: 'アプリを消したい',
+    ocrText: `${homeOcr} ${i}`,
+    featureId: 'operationSupport',
+    ocrChanged: true,
+  });
+}
+assert.ok(lastUninstallPlan);
+assert.match(lastUninstallPlan.plan.stepId, /anti-loop|uninstall-anti-loop/);
 
 // Unknown app / vague → clarify or ocr-grounded
 const unknown = buildGuidanceFromOcrText({

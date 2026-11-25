@@ -477,8 +477,17 @@ class AssistForegroundService : Service() {
     popupStreak = 0
     announcedPopupFingerprint = null
 
+    // Quiet OCR usually means nothing new — but uninstall needs re-entry so
+    // anti-loop / stage soft-advance can fire when the step never moves.
     if (!ocrChanged && announcedStepId.isNotEmpty() && announcedStageId != "unreadable") {
-      return null
+      val uninstallQuiet =
+        featureId == "operationSupport" &&
+          (announcedStageId.startsWith("uninstall") ||
+            announcedStepId.startsWith("uninstall") ||
+            announcedStageId == "anti-loop")
+      if (!uninstallQuiet) {
+        return null
+      }
     }
 
     // operationSupport: on-device LLM planner when probe-ready; else heuristics.

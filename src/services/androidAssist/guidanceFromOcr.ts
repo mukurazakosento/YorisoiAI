@@ -103,7 +103,8 @@ export function buildGuidanceFromOcrText(input: {
           : '電話アプリで番号を出してください。見つかったら通知でお伝えします。',
       voiceText:
         mode === 'email'
-          ? 'メールやメッセージを開いてください。怪しい文が見つかったら通知と音声でお伝えします。アプリに戻らなくて大丈夫です。自動では送りません。'
+          ? // Short waiting preamble only — result TTS keeps reasons / actions / #9110.
+            'メールやメッセージを開いてください。見つかったらお伝えします。'
           : '電話アプリを開いて番号を出してください。見つかったら通知と音声でお伝えします。アプリに戻らなくて大丈夫です。自動ではかけません。',
     });
   }
