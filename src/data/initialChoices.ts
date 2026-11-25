@@ -10,7 +10,7 @@ export const INITIAL_CHOICES: Record<FeatureId, ConsultationChoice[]> = {
   operationSupport: [
     { id: 'op-line', label: 'LINEの使い方が分からない' },
     { id: 'op-wifi', label: 'Wi-Fiにつなぎたい' },
-    { id: 'op-install', label: 'アプリを入れたい・消したい' },
+    { id: 'op-uninstall', label: 'アプリを消したい' },
     { id: 'op-other', label: 'その他の操作' },
   ],
   textExplanation: [

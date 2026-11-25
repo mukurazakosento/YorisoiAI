@@ -8,6 +8,11 @@ import { extractEmailCandidates } from './email';
 import { extractPhoneCandidates, type PhoneCandidate } from './phone';
 import { classifyJapanesePhoneNumber } from './phoneHeuristics';
 import {
+  buildFakePoliceEmailExplanation,
+  detectFakePolicePatterns,
+  isFakePoliceStyle,
+} from './fakePoliceEmail';
+import {
   detectScamPatterns,
   scamPatternLabels,
 } from './scamPatterns';
@@ -212,6 +217,7 @@ function inspectEmail(
   const urls = extractUrls(text);
   const scamHits = detectScamPatterns(text);
   const labels = scamPatternLabels(scamHits);
+  const fakePoliceHits = detectFakePolicePatterns(text);
 
   const urlChecks = urls.map((url) => ({
     url,
@@ -225,21 +231,46 @@ function inspectEmail(
       ? `差出人らしき文字「${emails[0].display}」が見えます。`
       : '差出人のメールアドレスは画面から特定できませんでした。';
 
+  if (isFakePoliceStyle(fakePoliceHits, scamHits)) {
+    const explained = buildFakePoliceEmailExplanation({
+      senderNote,
+      fakeHits: fakePoliceHits,
+      scamLabels: labels,
+      prefix: HEURISTIC_PREFIX,
+    });
+    return {
+      status: 'safety_result',
+      mode: 'demo',
+      riskLevel: 'dangerous',
+      message: explained.message,
+      displayText: explained.displayText,
+      voiceText: explained.voiceText,
+      rationale: explained.rationale,
+      recommendedActions: explained.recommendedActions,
+      sources: [],
+      urlChecks,
+      detectedPhones: [],
+      detectedEmails: emails.map((e) => e.display),
+      detectionNote: `メール検査・偽警察スタイル ${fakePoliceHits.length}+${scamHits.length} 件`,
+    };
+  }
+
   if (scamHits.length >= 2) {
     return {
       status: 'safety_result',
       mode: 'demo',
       riskLevel: 'dangerous',
-      message: `${HEURISTIC_PREFIX} ${senderNote}詐欺でよく使われる特徴が複数見つかりました（${labels.join('、')}）。「安全です」とは言いません。`,
-      displayText: '危険な特徴が見つかりました',
+      message: `${HEURISTIC_PREFIX} ${senderNote}詐欺の可能性が高いメールです。怪しいと考えられる理由: ${labels.join('。')}。安全に対応するには: URLを開かない。返信しない。個人情報や暗証を教えない。不安なら家族や公式窓口に相談する。「安全です」とは言いません。`,
+      displayText: '詐欺の可能性が高いメールです',
       voiceText:
-        '急かす表現やお金・個人情報の要求など、危険な特徴が見つかりました。リンクは開かず、返信しないでください。',
-      rationale: `端末内分析: ${labels.join('、')}`,
+        '詐欺の可能性が高いメールです。急かす表現やお金・個人情報の要求などが見つかりました。リンクは開かず、返信しないでください。不安なら家族に相談してください。',
+      rationale: `怪しいと考えられる理由: ${labels.join('。')}`,
       recommendedActions: [
         'URLを開かない',
         '相手に返信しない',
         '暗証番号や認証コードを教えない',
         '金融機関や公的機関を名乗る場合は公式窓口から確認する',
+        '不安なときは家族に相談する',
       ],
       sources: [],
       urlChecks,

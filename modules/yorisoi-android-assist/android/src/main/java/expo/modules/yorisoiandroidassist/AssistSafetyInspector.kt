@@ -147,15 +147,28 @@ object AssistSafetyInspector {
     val senderNote =
       if (sender != null) "差出人らしき文字「$sender」が見えます。" else "差出人は特定できませんでした。"
 
+    val fakePolice = detectFakePolicePatterns(text)
+    if (isFakePoliceStyle(fakePolice, hits)) {
+      val reasons = (fakePolice + hits).distinct().joinToString("。")
+      return Finding(
+        fingerprint = "email-fake-police-${fingerprintKey(text, emails, hits + fakePolice)}",
+        mode = "email",
+        displayText = "詐欺の可能性が高いメールです",
+        voiceText =
+          "$senderNote 詐欺の可能性が高いメールです。怪しいと考えられる理由: $reasons。URLは開かず、個人情報や振込もしないでください。不安なら家族か、警察相談のシャープくじゅういちゼロに相談してください。絶対に詐欺とは言い切りませんが、急いで手続きしないでください。自動では送りません。",
+        riskLevel = "dangerous",
+      )
+    }
+
     return when {
       hits.size >= 2 -> {
-        val labels = hits.joinToString("、")
+        val labels = hits.joinToString("。")
         Finding(
           fingerprint = "email-danger-${fingerprintKey(text, emails, hits)}",
           mode = "email",
-          displayText = "危険な特徴が見つかりました",
+          displayText = "詐欺の可能性が高いメールです",
           voiceText =
-            "$senderNote 急かす表現やお金・個人情報の要求など、危険な特徴が見つかりました（$labels）。リンクは開かず、返信しないでください。安全とは言いません。自動では送りません。",
+            "$senderNote 詐欺の可能性が高いメールです。怪しいと考えられる理由: $labels。リンクは開かず、返信しないでください。安全とは言いません。自動では送りません。",
           riskLevel = "dangerous",
         )
       }
@@ -292,15 +305,61 @@ object AssistSafetyInspector {
       hits.add("リンクへの誘導")
     }
     if (
-      Regex("""税務署|警察|裁判所|配送業者|ヤマト|佐川|Amazon|アマゾン|Apple|アップル|銀行|カード会社""")
+      Regex("""税務署|警察|警察庁|警視庁|裁判所|配送業者|ヤマト|佐川|Amazon|アマゾン|Apple|アップル|銀行|カード会社""")
         .containsMatchIn(n) &&
       (Regex("""です|ます|ください|お願い""").containsMatchIn(n) || hits.isNotEmpty())
     ) {
       hits.add("公的機関や有名企業を名乗る可能性")
     }
+    if (Regex("""捜査対象|被疑者|容疑者|逮捕|保釈|保釈金""").containsMatchIn(n)) {
+      hits.add("捜査・逮捕・保釈など不安を煽る表現")
+    }
     if (Regex("""当選|還付|給付金|無料で貰える|特別なご案内""").containsMatchIn(n)) {
       hits.add("当選・還付などの甘い話")
     }
     return hits
+  }
+
+  /** Mirrors JS detectFakePolicePatterns — reasons only, no absolute certainty. */
+  private fun detectFakePolicePatterns(text: String): List<String> {
+    val n = text.replace("\\s+".toRegex(), "")
+    val hits = mutableListOf<String>()
+    if (Regex("""警察庁|警視庁|警察署|警察官|警察から|サイバー捜査|捜査機関""").containsMatchIn(n)) {
+      hits.add("警察や捜査機関を名乗っている")
+    }
+    if (Regex("""捜査対象|被疑者|容疑者|犯罪に利用|口座が犯罪|不正利用の疑い""").containsMatchIn(n)) {
+      hits.add("捜査対象や犯罪利用をほのめかして不安にさせている")
+    }
+    if (Regex("""逮捕|身柄|連行|処罰""").containsMatchIn(n)) {
+      hits.add("逮捕などの強い脅しがある")
+    }
+    if (Regex("""保釈|保釈金""").containsMatchIn(n)) {
+      hits.add("保釈金など金銭の話が出ている")
+    }
+    if (
+      Regex("""http|www\.|bit\.ly|クリック|こちらをタップ|下記URL|URLから|リンク""", RegexOption.IGNORE_CASE)
+        .containsMatchIn(text) &&
+      (Regex("""至急|すぐに|今すぐ|本日中|放置""").containsMatchIn(n) || hits.isNotEmpty())
+    ) {
+      hits.add("急いでURLを開かせようとしている")
+    }
+    return hits
+  }
+
+  private fun isFakePoliceStyle(fakeHits: List<String>, scamHits: List<String>): Boolean {
+    val blob = (fakeHits + scamHits).joinToString("")
+    val hasPolice =
+      fakeHits.any { it.contains("警察") || it.contains("捜査対象") } ||
+        scamHits.any { it.contains("公的機関") }
+    val hasFear =
+      fakeHits.any { it.contains("逮捕") || it.contains("保釈") || it.contains("捜査対象") } ||
+        scamHits.any { it.contains("捜査・逮捕") }
+    val hasLure =
+      fakeHits.any { it.contains("URL") } ||
+        scamHits.any {
+          it.contains("リンク") || it.contains("急がせ") || it.contains("金銭")
+        }
+    return hasPolice && (hasFear || hasLure) && fakeHits.size + scamHits.size >= 2 &&
+      blob.isNotEmpty()
   }
 }

@@ -12,6 +12,10 @@ import {
 } from './concreteGuidance';
 import { detectPopup, explainPopup, explainScreenText } from './popupDetect';
 import type { AndroidAssistGuidance } from './types';
+import {
+  buildUninstallGuidanceStep,
+  looksLikeUninstallGoal,
+} from './uninstallGuidance';
 
 type StepCore = Omit<AndroidAssistGuidance, 'at' | 'ocrTextPreview' | 'mode'>;
 
@@ -146,6 +150,25 @@ export function buildGuidanceFromOcrText(input: {
   if (looksLikePhotoPickerGoal(goal)) {
     return base(finalizeConcrete(photoPickerStep(o, ocrRaw), ocrRaw, input.goalSummary));
   }
+  // 削除専用経路（汎用インストール案内より先に判定）
+  if (looksLikeUninstallGoal(goal)) {
+    const uninstall = buildUninstallGuidanceStep({
+      ocrNormalized: o,
+      ocrRaw,
+    });
+    return base(
+      finalizeConcrete(
+        {
+          stepId: uninstall.stepId,
+          stageId: uninstall.stageId,
+          displayText: uninstall.displayText,
+          voiceText: uninstall.voiceText,
+        },
+        ocrRaw,
+        input.goalSummary,
+      ),
+    );
+  }
   if (looksLikeInstallGoal(goal)) {
     return base(finalizeConcrete(installStep(o, ocrRaw), ocrRaw, input.goalSummary));
   }
@@ -271,10 +294,13 @@ function looksLikePhotoPickerGoal(g: string): boolean {
 }
 
 function looksLikeInstallGoal(g: string): boolean {
+  // アンインストールは looksLikeUninstallGoal 側。ここでは入れたい系のみ。
+  if (looksLikeUninstallGoal(g)) {
+    return false;
+  }
   return (
     g.includes('アプリを入れ') ||
     g.includes('インストール') ||
-    g.includes('アンインストール') ||
     g.includes('playストア') ||
     g.includes('ストアで')
   );
@@ -449,16 +475,8 @@ function photoPickerStep(o: string, raw: string): StepCore {
 }
 
 function installStep(o: string, raw: string): StepCore {
-  if (o.includes('アンインストール') || o.includes('削除')) {
-    return withSeen(
-      'install-uninstall',
-      'install-uninstall',
-      '消してよいアプリか確かめてから進めてください。',
-      'アンインストールは取り消せないことがあります。確かめてから、ご自身で進めてください。',
-      raw,
-      ['アンインストール', '削除'],
-    );
-  }
+  // 画面に削除語があっても、目標がインストールのときはストア確認のみ。
+  // 削除専用の長押し案内は looksLikeUninstallGoal 経路を使う。
   if (o.includes('インストール') || o.includes('入手') || o.includes('更新')) {
     return withSeen(
       'install-confirm',

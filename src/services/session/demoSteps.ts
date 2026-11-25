@@ -53,12 +53,18 @@ function resolveOperationScript(summary: string): SessionScript {
     return WIFI;
   }
   if (
+    n.includes('アンインストール') ||
+    n.includes('アプリを消し') ||
+    n.includes('アプリを削除') ||
+    n.includes('アプリ削除') ||
+    (n.includes('消したい') && n.includes('アプリ'))
+  ) {
+    return APP_UNINSTALL;
+  }
+  if (
     n.includes('アプリを入れ') ||
     n.includes('インストール') ||
-    n.includes('アプリを消し') ||
-    n.includes('アンインストール') ||
-    n.includes('入れたい') ||
-    n.includes('消したい')
+    n.includes('入れたい')
   ) {
     return APP_INSTALL;
   }
@@ -252,6 +258,47 @@ const APP_INSTALL: SessionScript = {
       simplifyDisplayText: '青い「入手」や雲を押します。',
       simplifyVoiceText:
         'アプリの右か下にある「入手」や雲のマークを押してください。分からなければ「分かりません」でも大丈夫です。',
+    },
+  ],
+};
+
+/** 削除専用。長押し→削除→確認の結果説明。秒数指示なし。自動削除なし。 */
+const APP_UNINSTALL: SessionScript = {
+  id: 'op-app-uninstall',
+  title: 'アプリを消す',
+  isDemo: DEMO,
+  steps: [
+    {
+      displayText: '消したいアプリが見える画面まで進んでください。',
+      voiceText:
+        'ホーム画面やアプリ一覧で、消したいアプリのアイコンが見えるところまで進んでください。よりそいAIは代わりに消しません。',
+      simplifyDisplayText: '消したいアプリが見える画面へ。',
+      simplifyVoiceText:
+        'ホーム画面で、消したいアプリの絵文字マークが見えるところまで進んでください。',
+    },
+    {
+      displayText: '消したいアプリを長押しして、メニューが出るまで待ってください。',
+      voiceText:
+        '消したいアプリのアイコンを指で長押ししてください。メニューが出るまで押したままにしてください。何秒、と数えなくて大丈夫です。メニューが出たら指を離してください。',
+      simplifyDisplayText: 'アイコンを長押しして、メニューが出るまで。',
+      simplifyVoiceText:
+        '消したいアプリを指で長押しします。メニューが出るまでそのままです。秒数は気にしなくて大丈夫です。',
+    },
+    {
+      displayText: '「削除」を押してください。押すと確認の画面が出ることが多いです。',
+      voiceText:
+        'メニューの「削除」や「アンインストール」を押してください。押すと「本当に削除しますか」などの確認が出ることが多いです。まだ消えていません。確認の画面で内容を読んでから、ご自身で進めてください。代わりには押しません。',
+      simplifyDisplayText: '「削除」を押します。確認が出ることが多いです。',
+      simplifyVoiceText:
+        '「削除」を押してください。そのあと確認の画面が出ることが多いです。まだ消えていません。',
+    },
+    {
+      displayText: '「削除」を押すとアプリが消えます。やめるなら「キャンセル」です。',
+      voiceText:
+        '確認の画面です。「削除」や「OK」を押すとアプリが端末から消えます。中のデータが消えることもあります。やめたければ「キャンセル」です。よりそいAIは代わりに押しません。',
+      simplifyDisplayText: '削除で消えます。やめるならキャンセル。',
+      simplifyVoiceText:
+        '削除を押すとアプリが消えます。やめたければキャンセルを押してください。',
     },
   ],
 };

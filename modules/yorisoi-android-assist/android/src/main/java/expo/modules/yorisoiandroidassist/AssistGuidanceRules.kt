@@ -70,6 +70,14 @@ object AssistGuidanceRules {
     if (looksLikePhotoPickerGoal(goal)) {
       return finalizeConcrete(photoPickerStep(o, raw), raw, goalSummary)
     }
+    // Uninstall-specialized path (before generic install guidance).
+    if (AssistUninstallGuidance.looksLikeUninstallGoal(goal)) {
+      return finalizeConcrete(
+        AssistUninstallGuidance.buildStep(o, raw),
+        raw,
+        goalSummary,
+      )
+    }
     if (looksLikeInstallGoal(goal)) {
       return finalizeConcrete(installStep(o, raw), raw, goalSummary)
     }
@@ -174,8 +182,12 @@ object AssistGuidanceRules {
   }
 
   private fun looksLikeInstallGoal(g: String): Boolean {
+    // Uninstall is AssistUninstallGuidance; keep this for install-only goals.
+    if (AssistUninstallGuidance.looksLikeUninstallGoal(g)) {
+      return false
+    }
     return g.contains("アプリを入れ") || g.contains("インストール") ||
-      g.contains("アンインストール") || g.contains("playストア") || g.contains("ストアで")
+      g.contains("playストア") || g.contains("ストアで")
   }
 
   /** When goal is unclear: still cite OCR, never invent LINE photo steps. */
@@ -693,15 +705,6 @@ object AssistGuidanceRules {
 
   private fun installStep(o: String, raw: String): Step {
     return when {
-      o.contains("アンインストール") || o.contains("削除") ->
-        step(
-          "install-uninstall",
-          "install-uninstall",
-          "消してよいアプリか確かめてから進めてください。",
-          "アンインストールは取り消せないことがあります。確かめてから、ご自身で進めてください。",
-          raw,
-          listOf("アンインストール", "削除"),
-        )
       o.contains("インストール") || o.contains("入手") || o.contains("更新") ->
         step(
           "install-confirm",

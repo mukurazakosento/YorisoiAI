@@ -40,24 +40,36 @@ export function SafetyResultPanel({
             { color: tone.text, fontSize: fontSize(baseFontSizes.bodyLarge) },
           ]}
         >
-          {riskLevelLabel(riskLevel)}
+          {response.displayText?.trim() || riskLevelLabel(riskLevel)}
         </Text>
       </View>
 
       {response.message ? (
         <Text
           style={[styles.message, { fontSize: fontSize(baseFontSizes.body) }]}
+          numberOfLines={4}
         >
           {response.message}
         </Text>
       ) : null}
 
       {response.rationale ? (
-        <Text
-          style={[styles.rationale, { fontSize: fontSize(baseFontSizes.caption) }]}
-        >
-          {response.rationale}
-        </Text>
+        <View style={styles.section}>
+          <Text
+            style={[
+              styles.sectionTitle,
+              { fontSize: fontSize(baseFontSizes.bodyLarge) },
+            ]}
+          >
+            怪しいと考えられる理由
+          </Text>
+          <Text
+            style={[styles.rationale, { fontSize: fontSize(baseFontSizes.caption) }]}
+            numberOfLines={3}
+          >
+            {response.rationale.replace(/^怪しいと考えられる理由[:：]\s*/, '')}
+          </Text>
+        </View>
       ) : null}
 
       {response.recommendedActions &&
@@ -69,7 +81,7 @@ export function SafetyResultPanel({
               { fontSize: fontSize(baseFontSizes.bodyLarge) },
             ]}
           >
-            次にできること
+            安全に対応するには
           </Text>
           {response.recommendedActions.map((action) => (
             <Text

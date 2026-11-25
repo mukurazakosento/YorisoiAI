@@ -9,7 +9,7 @@ export const DEMO_CLARIFY_CHOICES: Record<FeatureId, ConsultationChoice[]> = {
   operationSupport: [
     { id: 'demo-op-1', label: 'LINEの通知を直したい' },
     { id: 'demo-op-2', label: 'Wi-Fiにつなぎたい' },
-    { id: 'demo-op-3', label: 'アプリの入れ方を知りたい' },
+    { id: 'demo-op-3', label: 'アプリを消したい' },
     { id: 'demo-op-4', label: 'また別の言い方で書く' },
   ],
   textExplanation: [
