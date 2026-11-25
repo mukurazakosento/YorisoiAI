@@ -47,11 +47,18 @@ assert.match(service, /MediaProjection/);
 assert.match(service, /VirtualDisplay/);
 assert.match(service, /FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION|mediaProjection/);
 assert.match(service, /DEFAULT_INTERVAL_MS = 20000/);
+assert.match(service, /AssistUninstallGuidance\.nextPollDelayMs/);
 assert.match(service, /AssistOcrHelper/);
 assert.match(service, /AssistProjectionHolder\.clearAll/);
 assert.doesNotMatch(service, /BOOT_COMPLETED|RECEIVE_BOOT/);
 // Optional session-scoped Accessibility text OK; never auto-tap.
 assert.doesNotMatch(service, /dispatchGesture|performGlobalAction|ACTION_CLICK/);
+
+const uninstallKtAssist = read(
+  'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistUninstallGuidance.kt',
+);
+assert.match(uninstallKtAssist, /GO_HOME_STALL_TIMEOUT_MS\s*=\s*10_000L/);
+assert.match(uninstallKtAssist, /applyGoHomeStallTimeout/);
 
 const ocrHelper = read(
   'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistOcrHelper.kt',

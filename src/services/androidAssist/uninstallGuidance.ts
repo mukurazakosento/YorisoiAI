@@ -8,6 +8,7 @@
  * - 最初にホーム画面から消したいアプリのある画面へ行くよう案内する
  * - 削除の結果（取り除ける／データが消える場合がある）を先に伝える
  * - OCR 段階の後戻りを抑え、同じ段階の繰り返しは anti-loop で解除する
+ * - 「消したいアプリのある画面」段階で OCR が進まないときは約10秒で長押し案内へ進む
  */
 
 export type UninstallGuidanceStep = {
@@ -29,6 +30,12 @@ const STAGE_RANK: Record<UninstallStageId, number> = {
   'uninstall-menu': 2,
   'uninstall-confirm': 3,
 };
+
+/**
+ * Stall timeout on uninstall-go-home: do not wait forever for perfect home OCR.
+ * Ops cycle stays ~20s; FGS uses this as the next-poll delay while on go-home.
+ */
+export const UNINSTALL_GO_HOME_STALL_TIMEOUT_MS = 10_000;
 
 /** 削除の結果説明（意味を揃える定型）。 */
 export const UNINSTALL_CONSEQUENCE_VOICE =
@@ -66,11 +73,29 @@ const HOME_CUES = [
 /** Session-local stage cursor (prevents OCR flicker regress). */
 let lastUninstallStageId: UninstallStageId | '' = '';
 
+/** Wall-clock when uninstall-go-home was first selected this session. */
+let goHomeEnteredAtMs: number | null = null;
+
 /**
  * Clear uninstall stage cursor (call when a new assist session starts).
  */
 export function resetUninstallGuidanceProgress(): void {
   lastUninstallStageId = '';
+  goHomeEnteredAtMs = null;
+}
+
+/**
+ * Next capture delay hint: while stuck on go-home, poll by the stall timeout (~10s)
+ * so auto-advance can fire without waiting a full ~20s ops cycle.
+ */
+export function uninstallAssistPollDelayMs(
+  stageId: string | null | undefined,
+  defaultIntervalMs: number,
+): number {
+  if (normalizeUninstallStage(stageId) === 'uninstall-go-home') {
+    return Math.min(defaultIntervalMs, UNINSTALL_GO_HOME_STALL_TIMEOUT_MS);
+  }
+  return defaultIntervalMs;
 }
 
 /**
@@ -114,20 +139,24 @@ export const UNINSTALL_GOAL_SUMMARY = 'アプリをアンインストールし�
 /**
  * OCR に応じた削除専用の次の一手。一度に一つだけ。
  * previousStageId があれば後戻りを抑え、段階を進める。
+ * nowMs はテスト用（省略時は Date.now()）。
  */
 export function buildUninstallGuidanceStep(input: {
   ocrNormalized: string;
   ocrRaw: string;
   previousStageId?: string | null;
+  nowMs?: number;
 }): UninstallGuidanceStep {
   const o = input.ocrNormalized;
   const raw = input.ocrRaw;
+  const now = input.nowMs ?? Date.now();
   const prev =
     normalizeUninstallStage(input.previousStageId) ??
     normalizeUninstallStage(lastUninstallStageId);
 
   const ocrStage = matchUninstallStageFromOcr(o);
-  const stage = resolveUninstallStage(ocrStage, prev);
+  let stage = resolveUninstallStage(ocrStage, prev);
+  stage = applyGoHomeStallTimeout(stage, now);
   const step = stepForUninstallStage(stage, raw, o);
   lastUninstallStageId = step.stageId;
   return step;
@@ -135,19 +164,21 @@ export function buildUninstallGuidanceStep(input: {
 
 /**
  * Soft-advance copy when the same uninstall step repeats (anti-loop).
+ * go-home stall → advance to long-press (do not repeat home forever).
  */
 export function buildUninstallAntiLoopStep(
   stuckStageId: string | null | undefined,
 ): UninstallGuidanceStep {
   const stage = normalizeUninstallStage(stuckStageId) ?? 'uninstall-long-press';
   if (stage === 'uninstall-go-home') {
+    goHomeEnteredAtMs = null;
+    lastUninstallStageId = 'uninstall-long-press';
+    const longPress = uninstallLongPressStep();
     return {
       stepId: 'uninstall-anti-loop-home',
-      stageId: 'uninstall-go-home',
-      displayText:
-        'ホーム画面から、消したいアプリのある画面まで行ってください。',
-      voiceText:
-        '同じ案内が続いています。ホーム画面から、消したいアプリの絵文字マークが見える画面まで進めてください。代わりには消しません。',
+      stageId: 'uninstall-long-press',
+      displayText: longPress.displayText,
+      voiceText: longPress.voiceText,
     };
   }
   if (stage === 'uninstall-menu') {
@@ -240,6 +271,29 @@ function resolveUninstallStage(
   // Ambiguous / not-home: keep progress instead of bouncing to go-home.
   if (prevRank > STAGE_RANK['uninstall-go-home']) {
     return previous;
+  }
+  return 'uninstall-go-home';
+}
+
+/**
+ * If still on go-home after ~10s with no OCR advance, continue to long-press.
+ * Does not auto-tap; only advances spoken/notify guidance.
+ */
+function applyGoHomeStallTimeout(
+  stage: UninstallStageId,
+  nowMs: number,
+): UninstallStageId {
+  if (stage !== 'uninstall-go-home') {
+    goHomeEnteredAtMs = null;
+    return stage;
+  }
+  if (goHomeEnteredAtMs == null) {
+    goHomeEnteredAtMs = nowMs;
+    return 'uninstall-go-home';
+  }
+  if (nowMs - goHomeEnteredAtMs >= UNINSTALL_GO_HOME_STALL_TIMEOUT_MS) {
+    goHomeEnteredAtMs = null;
+    return 'uninstall-long-press';
   }
   return 'uninstall-go-home';
 }

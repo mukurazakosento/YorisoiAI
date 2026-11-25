@@ -29,10 +29,12 @@ export {
 export {
   UNINSTALL_CONSEQUENCE_VOICE,
   UNINSTALL_GOAL_SUMMARY,
+  UNINSTALL_GO_HOME_STALL_TIMEOUT_MS,
   buildUninstallAntiLoopStep,
   buildUninstallGuidanceStep,
   looksLikeUninstallGoal,
   resetUninstallGuidanceProgress,
+  uninstallAssistPollDelayMs,
 } from './uninstallGuidance';
 
 export {

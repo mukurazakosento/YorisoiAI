@@ -127,6 +127,8 @@ const uninstallSrc = read('src/services/androidAssist/uninstallGuidance.ts');
 assert.match(uninstallSrc, /メニューが出るまで/);
 assert.match(uninstallSrc, /ホーム画面から、消したいアプリのある画面まで/);
 assert.match(uninstallSrc, /UNINSTALL_CONSEQUENCE_VOICE|写真やメモなどが一緒に消えて/);
+assert.match(uninstallSrc, /UNINSTALL_GO_HOME_STALL_TIMEOUT_MS\s*=\s*10_000/);
+assert.match(uninstallSrc, /applyGoHomeStallTimeout|uninstallAssistPollDelayMs/);
 assert.doesNotMatch(uninstallSrc, /hold for \d+\s*seconds?/i);
 assert.doesNotMatch(uninstallSrc, /displayText:.*\d+秒/);
 assert.doesNotMatch(uninstallSrc, /voiceText:.*\d+秒/);
@@ -138,16 +140,18 @@ const uninstallKt = read(
   'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistUninstallGuidance.kt',
 );
 assert.match(uninstallKt, /ホーム画面から、消したいアプリのある画面まで/);
+assert.match(uninstallKt, /GO_HOME_STALL_TIMEOUT_MS\s*=\s*10_000L/);
+assert.match(uninstallKt, /applyGoHomeStallTimeout|nextPollDelayMs/);
 assert.doesNotMatch(
   uninstallKt,
   /voiceText[\s\S]{0,200}数えなくて|voiceText[\s\S]{0,200}秒数は気にしなくて/,
 );
-assert.match(
-  read(
-    'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistForegroundService.kt',
-  ),
-  /uninstallQuiet|startsWith\("uninstall/,
+const fgsSrc = read(
+  'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistForegroundService.kt',
 );
+assert.match(fgsSrc, /uninstallQuiet|startsWith\("uninstall/);
+assert.match(fgsSrc, /AssistUninstallGuidance\.nextPollDelayMs/);
+assert.match(fgsSrc, /DEFAULT_INTERVAL_MS = 20000/);
 
 // Avoid a11y/popup conflict files being rewritten for this feature
 assert.ok(
@@ -287,8 +291,10 @@ const {
   buildUninstallGuidanceStep,
   buildUninstallAntiLoopStep,
   resetUninstallGuidanceProgress,
+  uninstallAssistPollDelayMs,
   UNINSTALL_GOAL_SUMMARY,
   UNINSTALL_CONSEQUENCE_VOICE,
+  UNINSTALL_GO_HOME_STALL_TIMEOUT_MS,
 } = await import(
   pathToFileURL(
     path.join(root, 'src/services/androidAssist/uninstallGuidance.ts'),
@@ -300,6 +306,15 @@ assert.match(UNINSTALL_GOAL_SUMMARY, /アンインストール/);
 assert.match(UNINSTALL_CONSEQUENCE_VOICE, /メニューから削除を選ぶと/);
 assert.match(UNINSTALL_CONSEQUENCE_VOICE, /写真やメモ/);
 assert.match(UNINSTALL_CONSEQUENCE_VOICE, /残しておきたいもの/);
+assert.equal(UNINSTALL_GO_HOME_STALL_TIMEOUT_MS, 10_000);
+assert.equal(
+  uninstallAssistPollDelayMs('uninstall-go-home', 20_000),
+  10_000,
+);
+assert.equal(
+  uninstallAssistPollDelayMs('uninstall-long-press', 20_000),
+  20_000,
+);
 
 resetUninstallGuidanceProgress();
 const uninstallGoHome = buildGuidanceFromOcrText({
@@ -310,6 +325,31 @@ const uninstallGoHome = buildGuidanceFromOcrText({
 assert.equal(uninstallGoHome.stepId, 'uninstall-go-home');
 assert.match(uninstallGoHome.displayText, /ホーム画面から/);
 assert.doesNotMatch(uninstallGoHome.stepId, /^install-/);
+
+// go-home stall: after ~10s without home OCR, auto-advance to long-press
+resetUninstallGuidanceProgress();
+const stalledBefore = buildUninstallGuidanceStep({
+  ocrNormalized: '設定',
+  ocrRaw: '設定',
+  nowMs: 1_000,
+});
+assert.equal(stalledBefore.stageId, 'uninstall-go-home');
+const stalledMid = buildUninstallGuidanceStep({
+  ocrNormalized: '設定',
+  ocrRaw: '設定',
+  nowMs: 1_000 + 9_000,
+});
+assert.equal(stalledMid.stageId, 'uninstall-go-home');
+const stalledAfter = buildUninstallGuidanceStep({
+  ocrNormalized: '設定',
+  ocrRaw: '設定',
+  nowMs: 1_000 + 10_000,
+});
+assert.equal(stalledAfter.stageId, 'uninstall-long-press');
+assert.equal(stalledAfter.stepId, 'uninstall-long-press');
+assert.match(stalledAfter.displayText, /長押し/);
+assert.doesNotMatch(stalledAfter.voiceText, /\d+秒/);
+assert.doesNotMatch(stalledAfter.voiceText, /数えなくて|秒数は気に/);
 
 resetUninstallGuidanceProgress();
 const uninstallLong = buildUninstallGuidanceStep({
@@ -353,6 +393,11 @@ const soft = buildUninstallAntiLoopStep('uninstall-long-press');
 assert.match(soft.stepId, /anti-loop/);
 assert.match(soft.voiceText, /削除|アンインストール/);
 assert.doesNotMatch(soft.voiceText, /数えなくて|秒数は気に/);
+
+const softHome = buildUninstallAntiLoopStep('uninstall-go-home');
+assert.equal(softHome.stageId, 'uninstall-long-press');
+assert.match(softHome.displayText, /長押し/);
+assert.doesNotMatch(softHome.voiceText, /数えなくて|秒数は気に/);
 
 resetUninstallGuidanceProgress();
 resetPlanHistory();
