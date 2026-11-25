@@ -89,7 +89,10 @@ class AssistTtsHelper(context: Context) : TextToSpeech.OnInitListener {
     if (!ready.get()) {
       return
     }
-    val trimmed = text.trim()
+    val trimmed = prepareForSpeech(text)
+    if (trimmed.isBlank()) {
+      return
+    }
     if (trimmed == currentText || trimmed == pendingText) {
       return
     }
@@ -155,6 +158,7 @@ class AssistTtsHelper(context: Context) : TextToSpeech.OnInitListener {
   }
 
   private fun startSpeak(engine: TextToSpeech, text: String) {
+    // [text] is already prepareForSpeech'd by speakLatest / queue advance.
     currentText = text
     speaking = true
     val params = Bundle()
@@ -162,6 +166,27 @@ class AssistTtsHelper(context: Context) : TextToSpeech.OnInitListener {
     if (uttered != TextToSpeech.SUCCESS) {
       speaking = false
       currentText = null
+    }
+  }
+
+  /**
+   * Rewrite digit forms that Japanese TTS often misreads.
+   * Display / notify copy stays unchanged; only the uttered string is rewritten.
+   */
+  companion object {
+    fun prepareForSpeech(text: String): String {
+      var t = text.trim()
+      if (t.isEmpty()) return t
+      // #9110（シャープくじゅういちゼロ）→ reading only (avoid double-speak)
+      t =
+        t.replace(
+          Regex("""#\s*9110\s*[（(]\s*シャープくじゅういちゼロ\s*[）)]"""),
+          "シャープくじゅういちゼロ",
+        )
+      t = t.replace(Regex("""#\s*9110"""), "シャープくじゅういちゼロ")
+      // 119 → いちいちきゅう (not adjacent to other digits)
+      t = t.replace(Regex("""(^|[^0-9])119(?![0-9])"""), "$1いちいちきゅう")
+      return t
     }
   }
 }

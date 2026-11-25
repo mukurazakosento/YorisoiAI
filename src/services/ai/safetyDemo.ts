@@ -211,15 +211,16 @@ function buildMessageAnalyzeDemo(input: SafetyDemoInput): AiResponse {
   }
 
   if (scamHits.length >= 2) {
+    const shortReasons = labels.slice(0, 2);
+    const reasonsBlock = `怪しいと考えられる理由: ${shortReasons.join('。')}。`;
     return {
       status: 'safety_result',
       mode: 'demo',
       riskLevel: 'dangerous',
-      message: `${DEMO_PREFIX} 詐欺の可能性が高いメールです。怪しいと考えられる理由: ${labels.join('。')}。安全に対応するには: URLを開かない。返信しない。個人情報を教えない。「安全です」とは言いません。`,
+      message: `${DEMO_PREFIX} 詐欺の可能性が高いメールです。${reasonsBlock}安全に対応するには: URLを開かない。返信しない。個人情報を教えない。「安全です」とは言いません。`,
       displayText: '詐欺の可能性が高いメールです',
-      voiceText:
-        '詐欺の可能性が高いメールです。急かす表現やお金・個人情報の要求などが見つかりました。リンクは開かず、返信しないでください。',
-      rationale: `怪しいと考えられる理由: ${labels.join('。')}`,
+      voiceText: `詐欺の可能性が高いメールです。${reasonsBlock}リンクは開かず、返信しないでください。`,
+      rationale: reasonsBlock,
       recommendedActions: [
         'URLを開かない',
         '相手に返信しない',

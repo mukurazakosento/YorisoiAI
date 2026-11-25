@@ -19,7 +19,9 @@ import type { RootStackParamList } from '../types/navigation';
 type Props = NativeStackScreenProps<RootStackParamList, 'AndroidAssistConsent'>;
 
 /**
- * Android 背面支援の説明・同意。MediaProjection のシステム許可の前に必ず出す。
+ * Android 背面支援の説明・同意（レガシー／手動再入場用）。
+ * 通常フローは navigateToSupportSession が SupportSession へ直接進み、
+ * MediaProjection を自動開始する（この画面は挟まない）。
  * スクロール禁止。拒否時は手動スクショ経路の支援へ。
  */
 export function AndroidAssistConsentScreen({ navigation, route }: Props) {

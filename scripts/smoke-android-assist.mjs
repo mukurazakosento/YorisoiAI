@@ -100,6 +100,10 @@ const consent = read('src/screens/AndroidAssistConsentScreen.tsx');
 assert.doesNotMatch(consent, /\bScrollView\b/);
 assert.match(consent, /画面共有|背面/);
 assert.match(consent, /デモ|AI未接続|端末内AI/);
+// 通常フローは中間同意画面を挟まず SupportSession へ直接
+const navigateSupport = read('src/utils/navigateToSupport.ts');
+assert.doesNotMatch(navigateSupport, /AndroidAssistConsent/);
+assert.match(navigateSupport, /backgroundAssist:\s*assist\.available/);
 
 const support = read('src/screens/SupportSessionScreen.tsx');
 assert.doesNotMatch(support, /\bScrollView\b/);

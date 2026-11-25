@@ -12,7 +12,6 @@ import { getFeatureById } from '../constants/features';
 import { baseFontSizes } from '../constants/typography';
 import { useSettings } from '../hooks/useSettings';
 import { classifyIntent, isOnDeviceAiReady } from '../services/onDeviceAi';
-import { UNINSTALL_GOAL_SUMMARY } from '../services/androidAssist/uninstallGuidance';
 import {
   safetyModeSummary,
   type SafetyInspectMode,
@@ -122,17 +121,6 @@ export function ConsultationScreen({ navigation, route }: Props) {
     });
   };
 
-  /** 操作支援の削除専用導線（汎用操作案内とは別サマリー）。 */
-  const startUninstallAssist = () => {
-    if (busy) {
-      return;
-    }
-    navigateToSupportSession(navigation, {
-      featureId: 'operationSupport',
-      summary: UNINSTALL_GOAL_SUMMARY,
-    });
-  };
-
   const canSubmit = inputText.trim().length > 0 && !busy;
   const demoHint = !isOnDeviceAiReady();
 
@@ -213,7 +201,7 @@ export function ConsultationScreen({ navigation, route }: Props) {
             ]}
             numberOfLines={2}
           >
-            電話かメールを選んだあと、画面共有して番号や文を見つけ、通知と音声でお伝えします。
+            電話かメールを選ぶと、画面共有の許可のあと番号や文を見つけ、通知と音声でお伝えします。
           </Text>
           <View style={styles.methodActions}>
             <PrimaryButton
@@ -256,14 +244,6 @@ export function ConsultationScreen({ navigation, route }: Props) {
                 setMethod('voice');
               }}
             />
-            {featureId === 'operationSupport' ? (
-              <PrimaryButton
-                label="アプリを消したい"
-                variant="secondary"
-                onPress={startUninstallAssist}
-                disabled={busy}
-              />
-            ) : null}
           </View>
         </>
       ) : null}

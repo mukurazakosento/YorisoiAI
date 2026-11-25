@@ -167,6 +167,7 @@ function mergeNetworkPhoneResult(
           : '公開情報では判断できません'),
     voiceText:
       network.voiceText?.trim() ||
+      // 桁はそのまま渡さず、読み上げ側で 119→いちいちきゅう などに直す
       `番号「${primary.display}」の調査結果です。安全とは言い切れません。`,
     rationale:
       network.rationale?.trim() ||
@@ -256,15 +257,16 @@ function inspectEmail(
   }
 
   if (scamHits.length >= 2) {
+    const shortReasons = labels.slice(0, 2);
+    const reasonsBlock = `怪しいと考えられる理由: ${shortReasons.join('。')}。`;
     return {
       status: 'safety_result',
       mode: 'demo',
       riskLevel: 'dangerous',
-      message: `${HEURISTIC_PREFIX} ${senderNote}詐欺の可能性が高いメールです。怪しいと考えられる理由: ${labels.join('。')}。安全に対応するには: URLを開かない。返信しない。個人情報や暗証を教えない。不安なら家族や公式窓口に相談する。「安全です」とは言いません。`,
+      message: `${HEURISTIC_PREFIX} ${senderNote}詐欺の可能性が高いメールです。${reasonsBlock}安全に対応するには: URLを開かない。返信しない。個人情報や暗証を教えない。不安なら家族や公式窓口に相談する。「安全です」とは言いません。`,
       displayText: '詐欺の可能性が高いメールです',
-      voiceText:
-        '詐欺の可能性が高いメールです。急かす表現やお金・個人情報の要求などが見つかりました。リンクは開かず、返信しないでください。不安なら家族に相談してください。',
-      rationale: `怪しいと考えられる理由: ${labels.join('。')}`,
+      voiceText: `詐欺の可能性が高いメールです。${reasonsBlock}リンクは開かず、返信しないでください。不安なら家族に相談してください。`,
+      rationale: reasonsBlock,
       recommendedActions: [
         'URLを開かない',
         '相手に返信しない',

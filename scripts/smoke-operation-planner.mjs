@@ -305,8 +305,10 @@ const uninstallConfirm = buildUninstallGuidanceStep({
   ocrRaw: 'このアプリを削除しますか？ キャンセル 削除',
 });
 assert.equal(uninstallConfirm.stepId, 'uninstall-confirm-consequence');
-assert.match(uninstallConfirm.voiceText, /消えます|データ/);
+assert.match(uninstallConfirm.voiceText, /写真やメモ|消えてしまう/);
+assert.match(uninstallConfirm.voiceText, /残しておきたいもの/);
 assert.match(uninstallConfirm.displayText, /キャンセル/);
+assert.match(uninstallMenu.displayText, /メニューから|取り除けます/);
 
 const uninstallPlan = await planOperationSupport({
   goalSummary: 'アプリを消したい',

@@ -1,5 +1,7 @@
 import * as Speech from 'expo-speech';
 
+import { prepareTextForSpeech } from './prepareForSpeech';
+
 /**
  * 音声案内の境界（Expo Speech / iOS AVSpeechSynthesizer）。
  * displayText とは別に voiceText を読み上げる。消音でも画面文言は別途必須。
@@ -83,7 +85,7 @@ export function clampSpeechRate(rate: number): number {
  */
 export async function speak(options: SpeakOptions): Promise<void> {
   pendingLatest = null;
-  const text = options.text.trim();
+  const text = prepareTextForSpeech(options.text);
   if (!text) {
     return;
   }
@@ -109,7 +111,7 @@ export async function speak(options: SpeakOptions): Promise<void> {
  * 終了後に最新だけを一度読む。同じ文の重複はしない。
  */
 export async function speakLatest(options: SpeakOptions): Promise<void> {
-  const text = options.text.trim();
+  const text = prepareTextForSpeech(options.text);
   if (!text) {
     return;
   }
@@ -270,6 +272,7 @@ export const SPEECH_MUTE_HELP =
 export const SPEECH_DISABLED_HELP =
   '音声案内はオフです。聞くときは、設定で「音声案内」をオンにしてください。画面の文字はそのまま読めます。';
 
+export { prepareTextForSpeech } from './prepareForSpeech';
 export {
   SPEECH_RECOGNITION_EXPO_GO_HINT,
   SPEECH_RECOGNITION_PERMISSION_HINT,

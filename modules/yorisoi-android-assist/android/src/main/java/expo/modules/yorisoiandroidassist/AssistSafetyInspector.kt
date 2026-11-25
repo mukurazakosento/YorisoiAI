@@ -149,7 +149,8 @@ object AssistSafetyInspector {
 
     val fakePolice = detectFakePolicePatterns(text)
     if (isFakePoliceStyle(fakePolice, hits)) {
-      val reasons = (fakePolice + hits).distinct().joinToString("。")
+      // Keep 「怪しい理由」to about two short sentences (not a long dump).
+      val reasons = (fakePolice + hits).distinct().take(2).joinToString("。")
       return Finding(
         fingerprint = "email-fake-police-${fingerprintKey(text, emails, hits + fakePolice)}",
         mode = "email",
@@ -162,7 +163,7 @@ object AssistSafetyInspector {
 
     return when {
       hits.size >= 2 -> {
-        val labels = hits.joinToString("。")
+        val labels = hits.take(2).joinToString("。")
         Finding(
           fingerprint = "email-danger-${fingerprintKey(text, emails, hits)}",
           mode = "email",
