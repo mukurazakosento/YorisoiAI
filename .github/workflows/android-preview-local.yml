@@ -1,11 +1,15 @@
 # Manual Android preview APK via EAS local build (not EAS cloud).
-# Requires repo secret EXPO_TOKEN. Uses existing EAS project (see app.json / Expo dashboard:
-# 8c5ab79d-5478-46ed-b37e-30ed5b52df08). Do not commit tokens.
+# Requires repo secret EXPO_TOKEN. Uses existing EAS project
+# 8c5ab79d-5478-46ed-b37e-30ed5b52df08 via runner-only project:init.
+# Do not commit tokens or app.json changes from CI.
 
 name: Android Preview Local
 
 on:
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   android-preview-local:
@@ -14,22 +18,22 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "17"
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       - name: Accept Android SDK licenses
         run: yes | sdkmanager --licenses >/dev/null || true
@@ -39,13 +43,23 @@ jobs:
         run: |
           sdkmanager \
             "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0" \
+            "platforms;android-37" \
+            "build-tools;37.0.0" \
             "ndk;27.1.12297006" \
             "cmake;3.22.1"
 
       - name: Install npm dependencies
         run: npm ci
+
+      # Runner-only link to existing EAS project; do not commit resulting app.json edits.
+      - name: Link EAS project (runner only)
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: >
+          npx --yes eas-cli@latest project:init
+          --id 8c5ab79d-5478-46ed-b37e-30ed5b52df08
+          --force
+          --non-interactive
 
       - name: Ensure dist directory exists
         run: mkdir -p dist
@@ -62,7 +76,7 @@ jobs:
           --output ./dist/yorisoi-ai-preview.apk
 
       - name: Upload preview APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: yorisoi-ai-preview-apk
           path: dist/yorisoi-ai-preview.apk
