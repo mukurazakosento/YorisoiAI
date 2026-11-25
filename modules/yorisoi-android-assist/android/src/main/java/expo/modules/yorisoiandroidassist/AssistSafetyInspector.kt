@@ -59,8 +59,8 @@ object AssistSafetyInspector {
         stepId = "safety-waiting-email",
         stageId = "safety-wait",
         displayText = "メールやメッセージを開いてください。見つかったら通知でお伝えします。",
-        voiceText =
-          "メールやメッセージのアプリを開いてください。怪しい文が見つかったら、通知と音声でお伝えします。アプリに戻らなくて大丈夫です。リンクはまだ押さないでください。自動では送りません。",
+        // Short waiting preamble only — keep long reason/actions TTS on the result hit.
+        voiceText = "メールやメッセージを開いてください。見つかったらお伝えします。",
       )
     } else {
       AssistGuidanceRules.Step(

@@ -70,6 +70,25 @@ assert.match(inspector, /waitingStep/);
 assert.match(inspector, /pickBestSafetyText/);
 assert.doesNotMatch(inspector, /これは安全です|絶対に安全|安全です。/);
 assert.match(inspector, /安全とは言い切れません|安全とは言いません/);
+// Waiting preamble before locating mail must stay short (result TTS keeps reasons/#9110).
+assert.match(
+  inspector,
+  /voiceText = "メールやメッセージを開いてください。見つかったらお伝えします。"/,
+);
+assert.doesNotMatch(
+  inspector,
+  /waitingStep[\s\S]{0,400}アプリに戻らなくて大丈夫です[\s\S]{0,200}自動では送りません/,
+);
+const guidanceSafetyWait = read('src/services/androidAssist/guidanceFromOcr.ts');
+assert.match(
+  guidanceSafetyWait,
+  /メールやメッセージを開いてください。見つかったらお伝えします。/,
+);
+const safetyDemoSteps = read('src/services/session/demoSteps.ts');
+assert.match(
+  safetyDemoSteps,
+  /voiceText: 'メールやメッセージを開いてください。見つかったらお伝えします。'/,
+);
 
 const fgs = read(
   'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistForegroundService.kt',

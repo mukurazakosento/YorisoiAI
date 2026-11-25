@@ -27,9 +27,12 @@ export {
 } from './guidanceFromOcr';
 
 export {
+  UNINSTALL_CONSEQUENCE_VOICE,
   UNINSTALL_GOAL_SUMMARY,
+  buildUninstallAntiLoopStep,
   buildUninstallGuidanceStep,
   looksLikeUninstallGoal,
+  resetUninstallGuidanceProgress,
 } from './uninstallGuidance';
 
 export {

@@ -43,13 +43,19 @@ export function pushPlanHistory(
 /**
  * Detect repeated identical guidance (anti-loop).
  * Same stepId 3+ times with no OCR change → force ask.
+ * Uninstall path: also trip when OCR flickers but the step never advances.
  */
 export function isGuidanceLooping(
   plan: OperationPlan,
   ocrChanged: boolean,
 ): boolean {
-  if (ocrChanged) return false;
   const recent = history.filter((h) => h.stepId === plan.stepId);
+  const uninstallStuck =
+    plan.stepId.startsWith('uninstall-') || plan.stage.startsWith('uninstall-');
+  if (uninstallStuck) {
+    return recent.length >= 2;
+  }
+  if (ocrChanged) return false;
   return recent.length >= 2;
 }
 
