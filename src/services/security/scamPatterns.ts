@@ -36,7 +36,7 @@ export function detectScamPatterns(text: string): ScamPatternHit[] {
     hits.push({ id: 'link', label: 'リンクへの誘導' });
   }
   if (
-    /税務署|警察|裁判所|配送業者|ヤマト|佐川|Amazon|アマゾン|Apple|アップル|銀行|カード会社/u.test(
+    /税務署|警察|警察庁|警視庁|裁判所|配送業者|ヤマト|佐川|Amazon|アマゾン|Apple|アップル|銀行|カード会社/u.test(
       n,
     ) &&
     (/です|ます|ください|お願い/u.test(n) || hits.length > 0)
@@ -44,6 +44,12 @@ export function detectScamPatterns(text: string): ScamPatternHit[] {
     hits.push({
       id: 'impersonation',
       label: '公的機関や有名企業を名乗る可能性',
+    });
+  }
+  if (/捜査対象|被疑者|容疑者|逮捕|保釈|保釈金/u.test(n)) {
+    hits.push({
+      id: 'police_fear',
+      label: '捜査・逮捕・保釈など不安を煽る表現',
     });
   }
   if (/当選|還付|給付金|無料で貰える|特別なご案内/u.test(n)) {

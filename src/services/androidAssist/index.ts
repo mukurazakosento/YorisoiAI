@@ -27,6 +27,12 @@ export {
 } from './guidanceFromOcr';
 
 export {
+  UNINSTALL_GOAL_SUMMARY,
+  buildUninstallGuidanceStep,
+  looksLikeUninstallGoal,
+} from './uninstallGuidance';
+
+export {
   isVagueGuidanceText,
   rejectOrRewriteVagueGuidance,
   buildConcreteOpsStep,

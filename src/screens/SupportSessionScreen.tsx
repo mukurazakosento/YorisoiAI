@@ -572,7 +572,8 @@ export function SupportSessionScreen({ navigation, route }: Props) {
               ]}
               numberOfLines={1}
             >
-              {riskLevelLabel(safetyResult.riskLevel ?? 'insufficient_info')}
+              {safetyResult.displayText?.trim() ||
+                riskLevelLabel(safetyResult.riskLevel ?? 'insufficient_info')}
               {safetyResult.mode === 'demo' || safetyResult.mode === 'offline'
                 ? `（${safetyResult.mode === 'demo' ? 'デモ' : 'AI未接続'}）`
                 : ''}

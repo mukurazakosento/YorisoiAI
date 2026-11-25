@@ -12,6 +12,7 @@ import { getFeatureById } from '../constants/features';
 import { baseFontSizes } from '../constants/typography';
 import { useSettings } from '../hooks/useSettings';
 import { classifyIntent, isOnDeviceAiReady } from '../services/onDeviceAi';
+import { UNINSTALL_GOAL_SUMMARY } from '../services/androidAssist/uninstallGuidance';
 import {
   safetyModeSummary,
   type SafetyInspectMode,
@@ -118,6 +119,17 @@ export function ConsultationScreen({ navigation, route }: Props) {
     navigateToSupportSession(navigation, {
       featureId: 'safetyCheck',
       summary: safetyModeSummary(mode),
+    });
+  };
+
+  /** 操作支援の削除専用導線（汎用操作案内とは別サマリー）。 */
+  const startUninstallAssist = () => {
+    if (busy) {
+      return;
+    }
+    navigateToSupportSession(navigation, {
+      featureId: 'operationSupport',
+      summary: UNINSTALL_GOAL_SUMMARY,
     });
   };
 
@@ -244,6 +256,14 @@ export function ConsultationScreen({ navigation, route }: Props) {
                 setMethod('voice');
               }}
             />
+            {featureId === 'operationSupport' ? (
+              <PrimaryButton
+                label="アプリを消したい"
+                variant="secondary"
+                onPress={startUninstallAssist}
+                disabled={busy}
+              />
+            ) : null}
           </View>
         </>
       ) : null}

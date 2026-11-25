@@ -25,6 +25,15 @@ export {
   type ScamPatternHit,
 } from './scamPatterns';
 export {
+  FAKE_POLICE_DEMO_FULL_TEXT,
+  FAKE_POLICE_EMAIL_DEMO,
+  FAKE_POLICE_HEADLINE,
+  buildFakePoliceEmailExplanation,
+  detectFakePolicePatterns,
+  isFakePoliceStyle,
+  type FakePoliceReason,
+} from './fakePoliceEmail';
+export {
   classifyJapanesePhoneNumber,
   type PhoneHeuristicResult,
   type PhoneNumberKind,

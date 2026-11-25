@@ -6,6 +6,11 @@ import {
   normalizePhoneDigits,
   scamPatternLabels,
 } from '../security';
+import {
+  buildFakePoliceEmailExplanation,
+  detectFakePolicePatterns,
+  isFakePoliceStyle,
+} from '../security/fakePoliceEmail';
 import type { ConsultHistoryTurn, SafetyAction } from './types';
 
 const DEMO_PREFIX = '【デモ・AI未接続】';
@@ -174,6 +179,7 @@ function buildMessageAnalyzeDemo(input: SafetyDemoInput): AiResponse {
   const urls = extractUrls(text);
   const scamHits = detectScamPatterns(text);
   const labels = scamPatternLabels(scamHits);
+  const fakePoliceHits = detectFakePolicePatterns(text);
 
   const urlChecks = urls.map((url) => ({
     url,
@@ -182,21 +188,44 @@ function buildMessageAnalyzeDemo(input: SafetyDemoInput): AiResponse {
       'Web Risk の鍵がサーバーに無い、またはデモのため照合できませんでした。リンクは開かないでください。',
   }));
 
+  if (isFakePoliceStyle(fakePoliceHits, scamHits)) {
+    const explained = buildFakePoliceEmailExplanation({
+      senderNote: '',
+      fakeHits: fakePoliceHits,
+      scamLabels: labels,
+      prefix: DEMO_PREFIX,
+    });
+    return {
+      status: 'safety_result',
+      mode: 'demo',
+      riskLevel: 'dangerous',
+      message: explained.message,
+      displayText: explained.displayText,
+      voiceText: explained.voiceText,
+      rationale: explained.rationale,
+      recommendedActions: explained.recommendedActions,
+      sources: [],
+      urlChecks,
+      choices: ['別の文章を確認する', '最初の選択肢に戻る'],
+    };
+  }
+
   if (scamHits.length >= 2) {
     return {
       status: 'safety_result',
       mode: 'demo',
       riskLevel: 'dangerous',
-      message: `${DEMO_PREFIX} 詐欺でよく使われる特徴が複数見つかりました。「安全です」とは言いません。`,
-      displayText: '危険な特徴が見つかりました',
+      message: `${DEMO_PREFIX} 詐欺の可能性が高いメールです。怪しいと考えられる理由: ${labels.join('。')}。安全に対応するには: URLを開かない。返信しない。個人情報を教えない。「安全です」とは言いません。`,
+      displayText: '詐欺の可能性が高いメールです',
       voiceText:
-        '急かす表現やお金・個人情報の要求など、危険な特徴が見つかりました。リンクは開かず、返信しないでください。',
-      rationale: `デモ分析で検知: ${labels.join('、')}`,
+        '詐欺の可能性が高いメールです。急かす表現やお金・個人情報の要求などが見つかりました。リンクは開かず、返信しないでください。',
+      rationale: `怪しいと考えられる理由: ${labels.join('。')}`,
       recommendedActions: [
         'URLを開かない',
         '相手に返信しない',
         '暗証番号や認証コードを教えない',
         '金融機関や公的機関を名乗る場合は公式窓口から確認する',
+        '不安なときは家族に相談する',
       ],
       sources: [],
       urlChecks,

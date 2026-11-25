@@ -128,6 +128,37 @@ const APP_INSTALL_SCRIPT: GuidanceScript = {
   ],
 };
 
+const APP_UNINSTALL_SCRIPT: GuidanceScript = {
+  id: 'app-uninstall',
+  title: 'アプリを消す',
+  steps: [
+    {
+      displayText: '消したいアプリが見える画面まで進んでください。',
+      voiceText:
+        'ホーム画面やアプリ一覧で、消したいアプリのアイコンが見えるところまで進んでください。よりそいAIは代わりに消しません。',
+      simplifyDisplayText: '消したいアプリが見える画面へ。',
+      simplifyVoiceText:
+        'ホーム画面で、消したいアプリが見えるところまで進んでください。',
+    },
+    {
+      displayText: '消したいアプリを長押しして、メニューが出るまで待ってください。',
+      voiceText:
+        '消したいアプリのアイコンを指で長押ししてください。メニューが出るまで押したままにしてください。何秒、と数えなくて大丈夫です。メニューが出たら指を離してください。',
+      simplifyDisplayText: 'アイコンを長押しして、メニューが出るまで。',
+      simplifyVoiceText:
+        '消したいアプリを長押しします。メニューが出るまでそのままです。秒数は気にしなくて大丈夫です。',
+    },
+    {
+      displayText: '「削除」を押してください。押すと確認の画面が出ることが多いです。',
+      voiceText:
+        'メニューの「削除」や「アンインストール」を押してください。押すと確認の画面が出ることが多いです。まだ消えていません。確認を読んでからご自身で進めてください。代わりには押しません。',
+      simplifyDisplayText: '「削除」を押します。確認が出ることが多いです。',
+      simplifyVoiceText:
+        '「削除」を押してください。確認の画面が出ることが多いです。まだ消えていません。',
+    },
+  ],
+};
+
 const NOTIFY_SCRIPT: GuidanceScript = {
   id: 'notify-settings',
   title: '通知の設定',
@@ -293,10 +324,16 @@ function resolveScriptId(normalized: string): string {
     return 'wifi';
   }
   if (
-    normalized.includes('アプリを入れ') ||
-    normalized.includes('インストール') ||
+    normalized.includes('アンインストール') ||
     normalized.includes('アプリを消し') ||
-    normalized.includes('アンインストール')
+    normalized.includes('アプリを削除') ||
+    (normalized.includes('消したい') && normalized.includes('アプリ'))
+  ) {
+    return 'app-uninstall';
+  }
+  if (
+    normalized.includes('アプリを入れ') ||
+    normalized.includes('インストール')
   ) {
     return 'app-install';
   }
@@ -314,6 +351,8 @@ function scriptFromId(id: string | undefined): GuidanceScript | null {
       return WIFI_SCRIPT;
     case 'app-install':
       return APP_INSTALL_SCRIPT;
+    case 'app-uninstall':
+      return APP_UNINSTALL_SCRIPT;
     case 'notify-settings':
       return NOTIFY_SCRIPT;
     case 'generic-op':

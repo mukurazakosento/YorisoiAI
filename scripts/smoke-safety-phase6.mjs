@@ -22,6 +22,8 @@ assert.match(consultation, /label="メール"/);
 assert.match(consultation, /startSafetyMode\('phone'\)/);
 assert.match(consultation, /startSafetyMode\('email'\)/);
 assert.match(consultation, /通知と音声でお伝えします/);
+assert.match(consultation, /アプリを消したい/);
+assert.match(consultation, /startUninstallAssist|UNINSTALL_GOAL_SUMMARY/);
 assert.doesNotMatch(consultation, /layoutHints/);
 assert.doesNotMatch(consultation, /imageBase64|screenshotBytes|GEMINI_API_KEY|WEBRISK/);
 
@@ -294,6 +296,69 @@ assert.equal(scam.urlChecks[0].status, 'not_configured');
 assert.doesNotMatch(scam.message ?? '', /(?<!と[はも]言いません。*)安全です(?!」とは言いません)/);
 assert.doesNotMatch(scam.displayText ?? '', /^安全/);
 assert.match(scam.message ?? '', /とは言いません/);
+assert.match(scam.displayText ?? '', /詐欺の可能性が高い/);
+
+// 7b) 偽警察メール — 理由＋次の行動（断定しない）
+const {
+  FAKE_POLICE_DEMO_FULL_TEXT,
+  FAKE_POLICE_HEADLINE,
+  detectFakePolicePatterns,
+  isFakePoliceStyle,
+} = await import(
+  pathToFileURL(path.join(root, 'src/services/security/fakePoliceEmail.ts')).href,
+);
+const fakeHits = detectFakePolicePatterns(FAKE_POLICE_DEMO_FULL_TEXT);
+assert.ok(fakeHits.length >= 2);
+assert.ok(
+  fakeHits.some((h) => h.id === 'police_impersonation') ||
+    fakeHits.some((h) => h.id === 'investigation_claim'),
+);
+assert.ok(
+  fakeHits.some((h) => h.id === 'arrest_threat') ||
+    fakeHits.some((h) => h.id === 'urgent_url') ||
+    fakeHits.some((h) => h.id === 'bail_money'),
+);
+const fakeScamHits = detectScamPatterns(FAKE_POLICE_DEMO_FULL_TEXT);
+assert.equal(isFakePoliceStyle(fakeHits, fakeScamHits), true);
+
+const fakePolice = buildDemoSafetyResponse({
+  text: FAKE_POLICE_DEMO_FULL_TEXT,
+  safetyAction: 'message_analyze',
+});
+assert.equal(fakePolice.status, 'safety_result');
+assert.equal(fakePolice.riskLevel, 'dangerous');
+assert.equal(fakePolice.displayText, FAKE_POLICE_HEADLINE);
+assert.match(fakePolice.message ?? '', /怪しいと考えられる理由/);
+assert.match(fakePolice.message ?? '', /安全に対応するには/);
+assert.match(fakePolice.rationale ?? '', /警察|捜査|逮捕|URL|脅し/);
+assert.ok(
+  (fakePolice.recommendedActions ?? []).some((a) => /9110|くじゅういちゼロ/.test(a)),
+);
+assert.ok(
+  (fakePolice.recommendedActions ?? []).some((a) => /URL|リンク|開かない/.test(a)),
+);
+assert.match(fakePolice.message ?? '', /断定はしません/);
+assert.doesNotMatch(fakePolice.message ?? '', /絶対に詐欺です/);
+assert.doesNotMatch(fakePolice.voiceText ?? '', /絶対に詐欺です/);
+
+const fakeInspect = inspectSafetyText({
+  mode: 'email',
+  text: FAKE_POLICE_DEMO_FULL_TEXT,
+});
+assert.equal(fakeInspect.displayText, FAKE_POLICE_HEADLINE);
+assert.equal(fakeInspect.riskLevel, 'dangerous');
+assert.match(fakeInspect.voiceText ?? '', /シャープくじゅういちゼロ|9110|家族/);
+
+const safetyKt = fs.readFileSync(
+  path.join(
+    root,
+    'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistSafetyInspector.kt',
+  ),
+  'utf8',
+);
+assert.match(safetyKt, /詐欺の可能性が高いメールです/);
+assert.match(safetyKt, /detectFakePolicePatterns|警察庁|捜査対象/);
+assert.match(safetyKt, /シャープくじゅういちゼロ|#9110|9110/);
 
 // 8) URL 抽出
 assert.deepEqual(extractUrls('見て https://example.com/a です'), [
