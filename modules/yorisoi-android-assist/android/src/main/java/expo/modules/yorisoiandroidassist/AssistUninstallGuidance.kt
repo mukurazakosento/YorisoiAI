@@ -116,9 +116,9 @@ object AssistUninstallGuidance {
     return AssistGuidanceRules.Step(
       stepId = "uninstall-tap-delete",
       stageId = "uninstall-menu",
-      displayText = "${quoted}を押してください。押すと確認の画面が出ることが多いです。",
+      displayText = "メニューから${quoted}を選ぶと、アプリをスマートフォンから取り除けます。",
       voiceText =
-        "メニューの${quoted}を押してください。押すと「本当に削除しますか」などの確認が出ることが多いです。まだ消えていません。確認の画面で内容を読んでから、ご自身で進めてください。代わりには押しません。",
+        "メニューから${quoted}を選ぶと、アプリをスマートフォンから取り除けます。押すと確認の画面が出ることが多いです。まだ消えていません。確認の画面で内容を読んでから、ご自身で進めてください。代わりには押しません。",
     )
   }
 
@@ -127,9 +127,10 @@ object AssistUninstallGuidance {
     return AssistGuidanceRules.Step(
       stepId = "uninstall-confirm-consequence",
       stageId = "uninstall-confirm",
-      displayText = "「$label」を押すとアプリが消えます。やめるなら「キャンセル」です。",
+      displayText =
+        "消す前に、残しておきたいものがないか確認しましょう。やめるなら「キャンセル」です。",
       voiceText =
-        "確認の画面です。「$label」や「OK」を押すと、このアプリが端末から消えます。あとでストアから入れ直せることも多いですが、アプリの中のデータが消えることもあります。やめたければ「キャンセル」や「いいえ」を押してください。よりそいAIは代わりに押しません。",
+        "メニューから「$label」を選ぶと、アプリをスマートフォンから取り除けます。アプリによっては、中に保存していた写真やメモなどが一緒に消えてしまう場合があります。消す前に、そのアプリの中に残しておきたいものがないか確認しましょう。やめたければ「キャンセル」や「いいえ」を押してください。よりそいAIは代わりに押しません。",
     )
   }
 

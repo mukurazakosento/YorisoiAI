@@ -22,8 +22,9 @@ assert.match(consultation, /label="メール"/);
 assert.match(consultation, /startSafetyMode\('phone'\)/);
 assert.match(consultation, /startSafetyMode\('email'\)/);
 assert.match(consultation, /通知と音声でお伝えします/);
-assert.match(consultation, /アプリを消したい/);
-assert.match(consultation, /startUninstallAssist|UNINSTALL_GOAL_SUMMARY/);
+// 専用「アプリを消したい」ボタンは撤去（文字／音声の一般導線は残す）
+assert.doesNotMatch(consultation, /label="アプリを消したい"/);
+assert.doesNotMatch(consultation, /startUninstallAssist|UNINSTALL_GOAL_SUMMARY/);
 assert.doesNotMatch(consultation, /layoutHints/);
 assert.doesNotMatch(consultation, /imageBase64|screenshotBytes|GEMINI_API_KEY|WEBRISK/);
 
@@ -41,9 +42,10 @@ assert.match(features, /HOME_FEATURES:\s*FeatureDefinition\[\]\s*=\s*FEATURES/);
 assert.match(features, /id: 'safetyCheck'/);
 
 const navigate = read('src/utils/navigateToSupport.ts');
-assert.match(navigate, /AndroidAssistConsent/);
+// 中間の画面共有説明は挟まず、利用可能なら backgroundAssist: true で直接開始
+assert.doesNotMatch(navigate, /AndroidAssistConsent/);
 assert.match(navigate, /assist\.available/);
-// 安全性も同意画面へ（#22 の MP スキップを撤回）
+assert.match(navigate, /backgroundAssist:\s*assist\.available/);
 assert.doesNotMatch(
   navigate,
   /if \(params\.featureId === 'safetyCheck'\)[\s\S]{0,120}backgroundAssist:\s*false/,
@@ -52,6 +54,7 @@ assert.doesNotMatch(
 const consent = read('src/screens/AndroidAssistConsentScreen.tsx');
 assert.match(consent, /wantsSafety/);
 assert.match(consent, /結果のためにアプリを開き直す必要はありません/);
+assert.match(consent, /レガシー|通常フロー|直接/);
 
 const notifier = read(
   'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistNotifier.kt',
@@ -331,6 +334,18 @@ assert.equal(fakePolice.displayText, FAKE_POLICE_HEADLINE);
 assert.match(fakePolice.message ?? '', /怪しいと考えられる理由/);
 assert.match(fakePolice.message ?? '', /安全に対応するには/);
 assert.match(fakePolice.rationale ?? '', /警察|捜査|逮捕|URL|脅し/);
+// 理由は短い文を最大2つ（長い箇条書きにしない）
+{
+  const rationaleBody = (fakePolice.rationale ?? '').replace(
+    /^怪しいと考えられる理由[:：]\s*/,
+    '',
+  );
+  const reasonSentences = rationaleBody
+    .split('。')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  assert.ok(reasonSentences.length >= 1 && reasonSentences.length <= 2);
+}
 assert.ok(
   (fakePolice.recommendedActions ?? []).some((a) => /9110|くじゅういちゼロ/.test(a)),
 );
@@ -340,6 +355,7 @@ assert.ok(
 assert.match(fakePolice.message ?? '', /断定はしません/);
 assert.doesNotMatch(fakePolice.message ?? '', /絶対に詐欺です/);
 assert.doesNotMatch(fakePolice.voiceText ?? '', /絶対に詐欺です/);
+assert.match(fakePolice.voiceText ?? '', /詐欺の可能性が高い/);
 
 const fakeInspect = inspectSafetyText({
   mode: 'email',
@@ -348,6 +364,35 @@ const fakeInspect = inspectSafetyText({
 assert.equal(fakeInspect.displayText, FAKE_POLICE_HEADLINE);
 assert.equal(fakeInspect.riskLevel, 'dangerous');
 assert.match(fakeInspect.voiceText ?? '', /シャープくじゅういちゼロ|9110|家族/);
+{
+  const rationaleBody = (fakeInspect.rationale ?? '').replace(
+    /^怪しいと考えられる理由[:：]\s*/,
+    '',
+  );
+  const reasonSentences = rationaleBody
+    .split('。')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  assert.ok(reasonSentences.length >= 1 && reasonSentences.length <= 2);
+}
+
+const { prepareTextForSpeech } = await import(
+  pathToFileURL(path.join(root, 'src/services/speech/prepareForSpeech.ts')).href,
+);
+assert.equal(
+  prepareTextForSpeech('火事のときは119へ。'),
+  '火事のときはいちいちきゅうへ。',
+);
+assert.match(
+  prepareTextForSpeech('警察相談専用電話 #9110（シャープくじゅういちゼロ）に相談する'),
+  /シャープくじゅういちゼロ/,
+);
+assert.doesNotMatch(
+  prepareTextForSpeech('警察相談専用電話 #9110（シャープくじゅういちゼロ）に相談する'),
+  /#\s*9110/,
+);
+assert.match(prepareTextForSpeech('番号は119です'), /いちいちきゅう/);
+assert.doesNotMatch(prepareTextForSpeech('番号は119です'), /(?<![0-9])119(?![0-9])/);
 
 const safetyKt = fs.readFileSync(
   path.join(
@@ -359,6 +404,18 @@ const safetyKt = fs.readFileSync(
 assert.match(safetyKt, /詐欺の可能性が高いメールです/);
 assert.match(safetyKt, /detectFakePolicePatterns|警察庁|捜査対象/);
 assert.match(safetyKt, /シャープくじゅういちゼロ|#9110|9110/);
+assert.match(safetyKt, /\.take\(2\)/);
+
+const ttsHelper = fs.readFileSync(
+  path.join(
+    root,
+    'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistTtsHelper.kt',
+  ),
+  'utf8',
+);
+assert.match(ttsHelper, /prepareForSpeech/);
+assert.match(ttsHelper, /いちいちきゅう/);
+assert.match(ttsHelper, /シャープくじゅういちゼロ/);
 
 // 8) URL 抽出
 assert.deepEqual(extractUrls('見て https://example.com/a です'), [

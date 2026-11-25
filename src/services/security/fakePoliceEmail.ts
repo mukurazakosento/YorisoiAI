@@ -130,19 +130,25 @@ export function buildFakePoliceEmailExplanation(input: {
   rationale: string;
   recommendedActions: string[];
 } {
+  // 怪しい理由は短い文を最大2つ（長い箇条書きにしない）
   const reasonLabels = [
     ...input.fakeHits.map((h) => h.label),
     ...input.scamLabels.filter(
       (label) => !input.fakeHits.some((h) => h.label === label),
     ),
-  ].slice(0, 5);
+  ].slice(0, 2);
 
   const reasonsBlock =
     reasonLabels.length > 0
       ? `怪しいと考えられる理由: ${reasonLabels.join('。')}。`
       : '怪しいと考えられる理由: 警察を名乗り、急かしてリンクへ誘導する文面です。';
 
-  const actionsBlock = `安全に対応するには: ${FAKE_POLICE_ACTIONS.join('。')}。`;
+  const shortActions = [
+    'URLや添付は開かない',
+    '個人情報・口座・暗証番号を入力しない',
+    '不安なときは家族か、警察相談のシャープくじゅういちゼロに相談する',
+  ];
+  const actionsBlock = `安全に対応するには: ${shortActions.join('。')}。`;
 
   return {
     displayText: FAKE_POLICE_HEADLINE,
