@@ -7,6 +7,7 @@ import { END_SUPPORT_DISPLAY } from '../session/demoSteps';
 export {
   MAX_INSTRUCTION_NOTIFY_CHARS,
   MINIMAL_NOTIFY_SAMPLES,
+  longPressNotify,
   resolveMinimalNotifyInstruction,
   scrollNotify,
   tapNotify,

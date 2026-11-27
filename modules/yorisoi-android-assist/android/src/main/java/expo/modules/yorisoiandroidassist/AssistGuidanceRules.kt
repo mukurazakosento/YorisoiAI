@@ -123,7 +123,7 @@ object AssistGuidanceRules {
         "tap" ->
           AssistNotifyCopy.fromDisplayPatternsSafe(display) ?: AssistNotifyCopy.tap("項目")
         "ask" ->
-          AssistNotifyCopy.fromDisplayPatternsSafe(display) ?: "どちらを押す"
+          AssistNotifyCopy.fromDisplayPatternsSafe(display) ?: "どちらをタップ"
         else ->
           AssistNotifyCopy.resolve("", display, step.stageId, step.stepId)
       }

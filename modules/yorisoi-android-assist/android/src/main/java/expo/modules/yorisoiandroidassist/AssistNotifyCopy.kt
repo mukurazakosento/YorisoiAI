@@ -1,9 +1,11 @@
 package expo.modules.yorisoiandroidassist
 
 /**
- * Heads-up / FGS instruction bodies must be short essentials (≤17 Japanese chars).
+ * Heads-up / FGS instruction bodies must be short action-only lines
+ * (≤17 Japanese chars), e.g. 「通知」をタップ / 長押し.
  * Do not ship long prose and truncate into gibberish — author or derive a minimal line.
- * TTS / in-app displayText stay longer at the call site.
+ * TTS / in-app displayText stay the fuller pre-#35/#36 spoken baseline
+ * (git 88d07c7 / PR #34 tip) — never reuse this notify line as voiceText.
  */
 object AssistNotifyCopy {
   const val MAX_CHARS = AssistNotifier.MAX_INSTRUCTION_CHARS
@@ -32,17 +34,29 @@ object AssistNotifyCopy {
     return essentialsFallback(displayText)
   }
 
+  /** 「ラベル」をタップ — action-only notify (≤17). */
   fun tap(label: String): String {
     val cleaned = label.trim().ifEmpty { "項目" }
-    val candidate = "「$cleaned」を押す"
+    val candidate = "「$cleaned」をタップ"
     if (candidate.length <= MAX_CHARS) {
       return candidate
     }
-    val budget = MAX_CHARS - 5 // 「」を押す
+    val budget = MAX_CHARS - 6 // 「」をタップ
     if (budget >= 2) {
-      return "「${cleaned.take(budget)}」を押す"
+      return "「${cleaned.take(budget)}」をタップ"
     }
-    return "項目を押す"
+    return "項目をタップ"
+  }
+
+  fun longPress(label: String = ""): String {
+    val cleaned = label.trim()
+    if (cleaned.isNotEmpty()) {
+      val candidate = "「$cleaned」長押し"
+      if (candidate.length <= MAX_CHARS) {
+        return candidate
+      }
+    }
+    return "長押し"
   }
 
   fun scroll(lookFor: String = "", direction: String = "下へ"): String {
@@ -66,7 +80,7 @@ object AssistNotifyCopy {
       if (candidate.length <= MAX_CHARS) {
         return candidate
       }
-      return "どちらを押す"
+      return "どちらをタップ"
     }
     if (!a.isNullOrBlank()) {
       return tap(a)
@@ -80,10 +94,10 @@ object AssistNotifyCopy {
 
   private fun byStageOrStep(stageId: String, stepId: String): String? {
     when (stageId) {
-      "uninstall-go-home" -> return "ホームへ"
-      "uninstall-long-press" -> return "長押し"
-      "uninstall-menu" -> return "削除を押す"
-      "uninstall-confirm" -> return "確認してから"
+      "uninstall-go-home" -> return "消したいアプリを表示"
+      "uninstall-long-press" -> return "アイコンを長押し"
+      "uninstall-menu" -> return "削除項目を確認"
+      "uninstall-confirm" -> return "削除項目を確認"
       "safety-wait" ->
         return if (stepId.contains("email")) "メールを開く" else "番号を出す"
       "safety-result" -> return null // derive from display / risk wording
@@ -128,15 +142,22 @@ object AssistNotifyCopy {
       t.contains("公開情報では判断できません") -> return "判断できません"
       t.contains("メールやメッセージを開いて") -> return "メールを開く"
       t.contains("電話アプリで番号") || t.contains("番号を出して") -> return "番号を出す"
-      t.contains("長押し") -> return "長押し"
-      t.contains("ホーム画面") || t.startsWith("ホームへ") || t.contains("ホームから") ->
-        return "ホームへ"
+      t.contains("長押し") || t.contains("押したまま") -> return "アイコンを長押し"
+      t.contains("消したいアプリが見える") ||
+        t.contains("消したいアプリを表示") ||
+        t.contains("ホーム画面かアプリ一覧") ||
+        t.contains("ホーム画面") ||
+        t.startsWith("ホームへ") ||
+        t.contains("ホームから") -> return "消したいアプリを表示"
+      t.contains("削除の項目") ||
+        t.contains("削除項目を確認") ||
+        (t.contains("メニュー") && t.contains("削除")) -> return "削除項目を確認"
       t.contains("秘密の文字") -> return "秘密あり"
       t.contains("読み取れません") -> return "読み取れず"
     }
 
     val tapMatch =
-      Regex("""「([^」]{1,20})」(?:を|から)?(?:押|選)""")
+      Regex("""「([^」]{1,20})」(?:を|から)?(?:タップ|押|選)""")
         .find(t)
     if (tapMatch != null) {
       return tap(tapMatch.groupValues[1])

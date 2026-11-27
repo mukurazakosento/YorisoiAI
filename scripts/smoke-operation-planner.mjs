@@ -120,13 +120,16 @@ assert.match(
   read(
     'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistUninstallGuidance.kt',
   ),
-  /AssistUninstallGuidance|長押しして、メニューが出るまで/,
+  /AssistUninstallGuidance|アイコンを長押し|メニューが出たら指を離/,
 );
 assert.match(rules, /AssistUninstallGuidance/);
 const uninstallSrc = read('src/services/androidAssist/uninstallGuidance.ts');
-assert.match(uninstallSrc, /メニューが出るまで/);
-assert.match(uninstallSrc, /ホーム画面から、消したいアプリのある画面まで/);
-assert.match(uninstallSrc, /UNINSTALL_CONSEQUENCE_VOICE|写真やメモなどが一緒に消えて/);
+assert.match(uninstallSrc, /消したいアプリを表示/);
+assert.match(uninstallSrc, /アイコンを長押し/);
+assert.match(uninstallSrc, /削除項目を確認/);
+assert.match(uninstallSrc, /ホーム画面かアプリ一覧を開いて/);
+assert.match(uninstallSrc, /ご自身で削除の項目を押してください/);
+assert.match(uninstallSrc, /UNINSTALL_CONSEQUENCE_VOICE|写真やメモ、記録/);
 assert.match(uninstallSrc, /UNINSTALL_GO_HOME_STALL_TIMEOUT_MS\s*=\s*10_000/);
 assert.match(uninstallSrc, /applyGoHomeStallTimeout|uninstallAssistPollDelayMs/);
 assert.doesNotMatch(uninstallSrc, /hold for \d+\s*seconds?/i);
@@ -139,7 +142,10 @@ assert.doesNotMatch(
 const uninstallKt = read(
   'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistUninstallGuidance.kt',
 );
-assert.match(uninstallKt, /ホーム画面から、消したいアプリのある画面まで/);
+assert.match(uninstallKt, /ホーム画面かアプリ一覧を開いて/);
+assert.match(uninstallKt, /SHOW_APP_NOTIFY = "消したいアプリを表示"/);
+assert.match(uninstallKt, /LONG_PRESS_NOTIFY = "アイコンを長押し"/);
+assert.match(uninstallKt, /CONFIRM_DELETE_NOTIFY = "削除項目を確認"/);
 assert.match(uninstallKt, /GO_HOME_STALL_TIMEOUT_MS\s*=\s*10_000L/);
 assert.match(uninstallKt, /applyGoHomeStallTimeout|nextPollDelayMs/);
 assert.doesNotMatch(
@@ -303,9 +309,9 @@ const {
 assert.equal(looksLikeUninstallGoal('アプリをアンインストールしたい'), true);
 assert.equal(looksLikeUninstallGoal('アプリをインストールしたい'), false);
 assert.match(UNINSTALL_GOAL_SUMMARY, /アンインストール/);
-assert.match(UNINSTALL_CONSEQUENCE_VOICE, /メニューから削除を選ぶと/);
-assert.match(UNINSTALL_CONSEQUENCE_VOICE, /写真やメモ/);
-assert.match(UNINSTALL_CONSEQUENCE_VOICE, /残しておきたいもの/);
+assert.match(UNINSTALL_CONSEQUENCE_VOICE, /メニューにある削除の項目を確認/);
+assert.match(UNINSTALL_CONSEQUENCE_VOICE, /写真やメモ、記録/);
+assert.match(UNINSTALL_CONSEQUENCE_VOICE, /ご自身で削除の項目を押/);
 assert.equal(UNINSTALL_GO_HOME_STALL_TIMEOUT_MS, 10_000);
 assert.equal(
   uninstallAssistPollDelayMs('uninstall-go-home', 20_000),
@@ -323,10 +329,11 @@ const uninstallGoHome = buildGuidanceFromOcrText({
   ocrText: '設定',
 });
 assert.equal(uninstallGoHome.stepId, 'uninstall-go-home');
-assert.match(uninstallGoHome.displayText, /ホーム画面から/);
+assert.match(uninstallGoHome.voiceText, /ホーム画面かアプリ一覧/);
+assert.match(uninstallGoHome.displayText, /消したいアプリが見える/);
 assert.doesNotMatch(uninstallGoHome.stepId, /^install-/);
 
-// go-home stall: after ~10s without home OCR, auto-advance to long-press
+// ①→②: after ~10s without OCR advance to long-press
 resetUninstallGuidanceProgress();
 const stalledBefore = buildUninstallGuidanceStep({
   ocrNormalized: '設定',
@@ -334,6 +341,11 @@ const stalledBefore = buildUninstallGuidanceStep({
   nowMs: 1_000,
 });
 assert.equal(stalledBefore.stageId, 'uninstall-go-home');
+assert.equal(stalledBefore.notifyText, '消したいアプリを表示');
+assert.equal(
+  stalledBefore.voiceText,
+  'ホーム画面かアプリ一覧を開いて、消したいアプリが見えるところまで進んでください。見つからないときは、画面を左右にスクロールして探してください。',
+);
 const stalledMid = buildUninstallGuidanceStep({
   ocrNormalized: '設定',
   ocrRaw: '設定',
@@ -347,7 +359,7 @@ const stalledAfter = buildUninstallGuidanceStep({
 });
 assert.equal(stalledAfter.stageId, 'uninstall-long-press');
 assert.equal(stalledAfter.stepId, 'uninstall-long-press');
-assert.match(stalledAfter.displayText, /長押し/);
+assert.equal(stalledAfter.notifyText, 'アイコンを長押し');
 assert.doesNotMatch(stalledAfter.voiceText, /\d+秒/);
 assert.doesNotMatch(stalledAfter.voiceText, /数えなくて|秒数は気に/);
 
@@ -357,29 +369,40 @@ const uninstallLong = buildUninstallGuidanceStep({
   ocrRaw: 'Google 電話 メッセージ 設定 カメラ',
 });
 assert.equal(uninstallLong.stepId, 'uninstall-long-press');
+assert.equal(uninstallLong.notifyText, 'アイコンを長押し');
 assert.match(uninstallLong.displayText, /長押し/);
-assert.match(uninstallLong.displayText, /メニューが出るまで/);
-assert.match(uninstallLong.voiceText, /出るまで/);
+assert.equal(
+  uninstallLong.voiceText,
+  '消したいアプリのアイコンを指で押したままにしてください。アプリの近くに小さなメニューが表示されるまで押し続けてください。メニューが出たら指を離してください。',
+);
 assert.doesNotMatch(uninstallLong.voiceText, /\d+秒/);
 assert.doesNotMatch(uninstallLong.voiceText, /数えなくて|秒数は気に/);
+
+// Without 「削除」, stay on long-press (do not invent menu advance)
+const noMenuYet = buildUninstallGuidanceStep({
+  ocrNormalized: 'google電話メッセージ設定カメラ',
+  ocrRaw: 'Google 電話 メッセージ 設定 カメラ',
+  previousStageId: 'uninstall-long-press',
+});
+assert.equal(noMenuYet.stageId, 'uninstall-long-press');
 
 const uninstallMenu = buildUninstallGuidanceStep({
   ocrNormalized: '削除アンインストールアプリ情報',
   ocrRaw: '削除 アンインストール アプリ情報',
 });
 assert.equal(uninstallMenu.stepId, 'uninstall-tap-delete');
-assert.match(uninstallMenu.voiceText, /写真やメモ|残しておきたいもの/);
-assert.match(uninstallMenu.voiceText, /確認/);
+assert.equal(uninstallMenu.notifyText, '削除項目を確認');
+assert.equal(uninstallMenu.voiceText, UNINSTALL_CONSEQUENCE_VOICE);
+assert.match(uninstallMenu.voiceText, /ご自身で削除の項目を押/);
 
 const uninstallConfirm = buildUninstallGuidanceStep({
   ocrNormalized: 'このアプリを削除しますかキャンセル削除',
   ocrRaw: 'このアプリを削除しますか？ キャンセル 削除',
 });
 assert.equal(uninstallConfirm.stepId, 'uninstall-confirm-consequence');
-assert.match(uninstallConfirm.voiceText, /写真やメモ|消えてしまう/);
-assert.match(uninstallConfirm.voiceText, /残しておきたいもの/);
-assert.match(uninstallConfirm.displayText, /キャンセル/);
-assert.match(uninstallMenu.displayText, /メニューから|取り除けます/);
+assert.equal(uninstallConfirm.notifyText, '削除項目を確認');
+assert.equal(uninstallConfirm.voiceText, UNINSTALL_CONSEQUENCE_VOICE);
+assert.match(uninstallConfirm.displayText, /ご自身で押/);
 
 // Stage matching: do not regress from menu to go-home on ambiguous OCR
 const held = buildUninstallGuidanceStep({
@@ -391,12 +414,13 @@ assert.equal(held.stageId, 'uninstall-menu');
 
 const soft = buildUninstallAntiLoopStep('uninstall-long-press');
 assert.match(soft.stepId, /anti-loop/);
-assert.match(soft.voiceText, /削除|アンインストール/);
+assert.equal(soft.notifyText, 'アイコンを長押し');
+assert.equal(soft.voiceText, uninstallLong.voiceText);
 assert.doesNotMatch(soft.voiceText, /数えなくて|秒数は気に/);
 
 const softHome = buildUninstallAntiLoopStep('uninstall-go-home');
 assert.equal(softHome.stageId, 'uninstall-long-press');
-assert.match(softHome.displayText, /長押し/);
+assert.equal(softHome.notifyText, 'アイコンを長押し');
 assert.doesNotMatch(softHome.voiceText, /数えなくて|秒数は気に/);
 
 resetUninstallGuidanceProgress();
