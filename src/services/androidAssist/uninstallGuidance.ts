@@ -11,11 +11,15 @@
  * - 「消したいアプリのある画面」段階で OCR が進まないときは約10秒で長押し案内へ進む
  */
 
+import { tapNotify } from '../notifications/minimalNotifyInstruction';
+
 export type UninstallGuidanceStep = {
   stepId: string;
   stageId: UninstallStageId;
   displayText: string;
   voiceText: string;
+  /** Heads-up body: short essentials ≤17 chars (TTS uses voiceText). */
+  notifyText: string;
 };
 
 export type UninstallStageId =
@@ -179,6 +183,7 @@ export function buildUninstallAntiLoopStep(
       stageId: 'uninstall-long-press',
       displayText: longPress.displayText,
       voiceText: longPress.voiceText,
+      notifyText: longPress.notifyText,
     };
   }
   if (stage === 'uninstall-menu') {
@@ -188,6 +193,7 @@ export function buildUninstallAntiLoopStep(
       displayText:
         'メニューの「削除」を選ぶ前に、残しておきたいものがないか確認しましょう。',
       voiceText: `${UNINSTALL_CONSEQUENCE_VOICE} やめたければ「キャンセル」です。代わりには押しません。`,
+      notifyText: '確認してから',
     };
   }
   if (stage === 'uninstall-confirm') {
@@ -197,6 +203,7 @@ export function buildUninstallAntiLoopStep(
       displayText:
         '消す前に、残しておきたいものがないか確認しましょう。やめるなら「キャンセル」です。',
       voiceText: `${UNINSTALL_CONSEQUENCE_VOICE} やめたければ「キャンセル」や「いいえ」を押してください。よりそいAIは代わりに押しません。`,
+      notifyText: '確認してから',
     };
   }
   // long-press (default): nudge toward looking for the menu without second-counting
@@ -207,6 +214,7 @@ export function buildUninstallAntiLoopStep(
       'メニューが出たら「削除」や「アンインストール」を探してください。',
     voiceText:
       '同じ案内が続いています。長押しでメニューや小さな窓が出たら指を離し、「削除」や「アンインストール」を探してください。見えなければ、一度指を離してもう一度長押ししてみてください。代わりには消しません。',
+    notifyText: '削除を探す',
   };
 }
 
@@ -364,6 +372,7 @@ function uninstallGoHomeStep(): UninstallGuidanceStep {
       'ホーム画面から、消したいアプリのある画面まで行ってください。',
     voiceText:
       'ホーム画面から、消したいアプリのある画面まで行ってください。アプリの絵文字マークが見えるところです。よりそいAIは代わりに消しません。',
+    notifyText: 'ホームへ',
   };
 }
 
@@ -374,6 +383,7 @@ function uninstallLongPressStep(): UninstallGuidanceStep {
     displayText: '消したいアプリを長押しして、メニューが出るまで待ってください。',
     voiceText:
       '消したいアプリのアイコンを指で長押ししてください。メニューや小さな窓が出るまで、そのまま押したままにしてください。メニューが出たら指を離してください。',
+    notifyText: '長押し',
   };
 }
 
@@ -385,6 +395,7 @@ function uninstallTapDeleteStep(raw: string, o: string): UninstallGuidanceStep {
     stageId: 'uninstall-menu',
     displayText: `メニューから${quoted}を選ぶと、アプリをスマートフォンから取り除けます。`,
     voiceText: `${UNINSTALL_CONSEQUENCE_VOICE} 押すと確認の画面が出ることが多いです。まだ消えていません。代わりには押しません。`,
+    notifyText: label ? tapNotify(label) : '削除を押す',
   };
 }
 
@@ -400,6 +411,7 @@ function uninstallConfirmConsequenceStep(
     displayText:
       '消す前に、残しておきたいものがないか確認しましょう。やめるなら「キャンセル」です。',
     voiceText: `${UNINSTALL_CONSEQUENCE_VOICE} やめたければ「キャンセル」や「いいえ」を押してください。よりそいAIは代わりに押しません。`,
+    notifyText: '確認してから',
   };
 }
 

@@ -6,9 +6,18 @@ import { END_SUPPORT_DISPLAY } from '../session/demoSteps';
 
 export {
   MAX_INSTRUCTION_NOTIFY_CHARS,
+  MINIMAL_NOTIFY_SAMPLES,
+  resolveMinimalNotifyInstruction,
+  scrollNotify,
+  tapNotify,
   truncateInstructionNotifyText,
-} from './truncateInstruction';
-import { truncateInstructionNotifyText } from './truncateInstruction';
+} from './minimalNotifyInstruction';
+export type { MinimalNotifyOptions } from './minimalNotifyInstruction';
+import {
+  resolveMinimalNotifyInstruction,
+  truncateInstructionNotifyText,
+  type MinimalNotifyOptions,
+} from './minimalNotifyInstruction';
 
 export const END_SUPPORT_NOTIFICATION_DATA = {
   kind: 'end_support' as SessionNotificationKind,
@@ -100,13 +109,16 @@ export async function ensureNotificationPermission(): Promise<SessionNotificatio
 }
 
 /**
- * いまの一手を短い文言でローカル通知する。
+ * いまの一手を短い必須文言（≤17字）でローカル通知する。
+ * 長い displayText を切って通知しない — resolveMinimalNotifyInstruction で要点化。
+ * TTS / 画面表示は呼び出し側の displayText・voiceText のまま。
  * 失敗しても呼び出し側は画面表示を続けること。
  */
 export async function presentInstructionNotification(
   displayText: string,
+  options?: MinimalNotifyOptions,
 ): Promise<{ ok: boolean; reason?: string }> {
-  const text = truncateInstructionNotifyText(displayText);
+  const text = resolveMinimalNotifyInstruction(displayText, options);
   if (!text) {
     return { ok: false, reason: 'empty' };
   }

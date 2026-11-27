@@ -81,6 +81,7 @@ object AssistOperationPlanner {
             voiceText =
               "同じ案内が続いています。次に押す場所を一つだけ教えてください。代わりには押しません。",
             mode = step.mode,
+            notifyText = "次を教えて",
           )
         }
       pushHistory(ask.stepId)
@@ -153,6 +154,7 @@ object AssistOperationPlanner {
           displayText = d,
           voiceText = v,
           mode = "live",
+          notifyText = AssistNotifyCopy.scroll(lookFor.ifBlank { target }),
         )
       }
       if (AssistConcreteGuidance.isVague("$display\n$voice")) {
@@ -200,6 +202,13 @@ object AssistOperationPlanner {
         displayText = display.take(120),
         voiceText = voice.take(240),
         mode = "live",
+        notifyText =
+          AssistNotifyCopy.resolve(
+            notifyText = "",
+            displayText = display,
+            stageId = stage,
+            stepId = stepId,
+          ),
       )
     } catch (_: Exception) {
       unsureStep()
@@ -219,6 +228,7 @@ object AssistOperationPlanner {
           "画面を判断できませんでした。もう一度画面を見せるか、やりたいことを短く教えてください。代わりには操作しません。"
         },
       mode = "live",
+      notifyText = "判断できません",
     )
   }
 

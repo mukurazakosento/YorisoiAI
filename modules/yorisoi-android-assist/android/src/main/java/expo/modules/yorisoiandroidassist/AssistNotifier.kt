@@ -16,11 +16,12 @@ object AssistNotifier {
 
   /**
    * Heads-up / FGS instruction lines must stay ≤17 Japanese characters.
-   * TTS and in-app displayText stay full length at the call site.
+   * Call sites should pass AssistNotifyCopy essentials (not long prose).
+   * This truncate is a safety net only — TTS / displayText stay full length.
    */
   const val MAX_INSTRUCTION_CHARS = 17
 
-  /** Truncate notify title/body to [MAX_INSTRUCTION_CHARS] (ellipsis when cut). */
+  /** Safety-net truncate for notify title/body (ellipsis when cut). Prefer AssistNotifyCopy. */
   fun truncateForNotify(text: String, maxChars: Int = MAX_INSTRUCTION_CHARS): String {
     val trimmed = text.trim()
     if (trimmed.length <= maxChars) {

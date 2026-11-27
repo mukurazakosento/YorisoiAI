@@ -24,8 +24,10 @@ const service = read(
 assert.match(service, /DEFAULT_INTERVAL_MS = 20000/);
 assert.match(service, /coerceIn\(3000L,\s*60000L\)/);
 assert.match(service, /requiredStreak|AssistPopupDetector\.requiredStreak/);
-assert.match(service, /updateForeground\(safeDisplay\)/);
+assert.match(service, /AssistNotifyCopy\.fromGuidance/);
+assert.match(service, /updateForeground\(safeNotify\)/);
 assert.match(service, /AssistNotifier\.showGuidance/);
+assert.match(service, /tts\?\.speakLatest\(safeVoice\)/);
 assert.match(service, /AssistSecretRedactor\.forPublicText/);
 assert.match(service, /speakLatest\(safeVoice\)/);
 assert.match(service, /featureId == "textExplanation"/);
