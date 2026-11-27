@@ -114,7 +114,7 @@ object AssistUninstallGuidance {
             "メニューの「削除」を選ぶ前に、残しておきたいものがないか確認しましょう。",
           voiceText =
             "$CONSEQUENCE_VOICE やめたければ「キャンセル」です。代わりには押しません。",
-          notifyText = "確認してから",
+          notifyText = "「削除」をタップ",
         )
       "uninstall-confirm" ->
         AssistGuidanceRules.Step(
@@ -124,7 +124,7 @@ object AssistUninstallGuidance {
             "消す前に、残しておきたいものがないか確認しましょう。やめるなら「キャンセル」です。",
           voiceText =
             "$CONSEQUENCE_VOICE やめたければ「キャンセル」や「いいえ」を押してください。よりそいAIは代わりに押しません。",
-          notifyText = "確認してから",
+          notifyText = "「削除」をタップ",
         )
       else ->
         AssistGuidanceRules.Step(
@@ -134,7 +134,7 @@ object AssistUninstallGuidance {
             "メニューが出たら「削除」や「アンインストール」を探してください。",
           voiceText =
             "同じ案内が続いています。長押しでメニューや小さな窓が出たら指を離し、「削除」や「アンインストール」を探してください。見えなければ、一度指を離してもう一度長押ししてみてください。代わりには消しません。",
-          notifyText = "削除を探す",
+          notifyText = "長押し",
         )
     }
   }
@@ -292,7 +292,7 @@ object AssistUninstallGuidance {
       if (label != null) {
         AssistNotifyCopy.tap(label)
       } else {
-        "削除を押す"
+        "「削除」をタップ"
       }
     return AssistGuidanceRules.Step(
       stepId = "uninstall-tap-delete",
@@ -312,7 +312,7 @@ object AssistUninstallGuidance {
         "消す前に、残しておきたいものがないか確認しましょう。やめるなら「キャンセル」です。",
       voiceText =
         "$CONSEQUENCE_VOICE やめたければ「キャンセル」や「いいえ」を押してください。よりそいAIは代わりに押しません。",
-      notifyText = "確認してから",
+      notifyText = "「削除」をタップ",
     )
   }
 

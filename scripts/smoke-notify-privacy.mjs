@@ -36,7 +36,7 @@ assert.match(notifyCopy, /object AssistNotifyCopy/);
 assert.match(notifyCopy, /fun fromGuidance/);
 assert.match(notifyCopy, /ホームへ/);
 assert.match(notifyCopy, /長押し/);
-assert.match(notifyCopy, /削除を押す/);
+assert.match(notifyCopy, /「削除」をタップ|をタップ/);
 assert.match(notifyCopy, /詐欺の恐れ/);
 assert.match(notifyCopy, /カメラ許可？/);
 
@@ -83,7 +83,7 @@ const uninstallKt = read(
 );
 assert.match(uninstallKt, /notifyText = "ホームへ"/);
 assert.match(uninstallKt, /notifyText = "長押し"/);
-assert.match(uninstallKt, /notifyText = "確認してから"/);
+assert.match(uninstallKt, /notifyText = "「削除」をタップ"/);
 
 const safetyKt = read(
   'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistSafetyInspector.kt',
@@ -156,11 +156,12 @@ for (const sample of samples) {
 }
 assert.equal(MINIMAL_NOTIFY_SAMPLES.goHome, 'ホームへ');
 assert.equal(MINIMAL_NOTIFY_SAMPLES.longPress, '長押し');
-assert.equal(MINIMAL_NOTIFY_SAMPLES.tapDelete, '削除を押す');
+assert.equal(MINIMAL_NOTIFY_SAMPLES.tapDelete, '「削除」をタップ');
+assert.equal(MINIMAL_NOTIFY_SAMPLES.confirm, '「削除」をタップ');
 assert.equal(MINIMAL_NOTIFY_SAMPLES.scamRisk, '詐欺の恐れ');
 assert.equal(MINIMAL_NOTIFY_SAMPLES.cameraPerm, 'カメラ許可？');
 
-// Ops / safety / text-explain: resolve to usable short essentials (not gibberish cut).
+// Ops / safety / text-explain: resolve to usable short action essentials (not gibberish cut).
 assert.equal(
   resolveMinimalNotifyInstruction(
     'ホーム画面から、消したいアプリのある画面まで行ってください。',
@@ -177,13 +178,13 @@ assert.equal(
   resolveMinimalNotifyInstruction(
     'メニューから「削除」を選ぶと、アプリをスマートフォンから取り除けます。',
   ),
-  '「削除」を押す',
+  '「削除」をタップ',
 );
 assert.equal(
   resolveMinimalNotifyInstruction(
     '画面の下あたりの「通知」を押してください。',
   ),
-  '「通知」を押す',
+  '「通知」をタップ',
 );
 assert.equal(
   resolveMinimalNotifyInstruction(
@@ -230,9 +231,10 @@ assert.equal(
   }),
   'ホームへ',
 );
-assert.equal(tapNotify('削除'), '「削除」を押す');
+assert.equal(tapNotify('削除'), '「削除」をタップ');
 assert.equal(scrollNotify('通知'), '「通知」を探す');
 assert.ok(tapNotify('ネットワークとインターネット').length <= 17);
+assert.match(tapNotify('ネットワークとインターネット'), /をタップ$/);
 
 for (const body of [
   resolveMinimalNotifyInstruction(longOps),
@@ -259,7 +261,14 @@ assert.doesNotMatch(
 const uninstallJs = read('src/services/androidAssist/uninstallGuidance.ts');
 assert.match(uninstallJs, /notifyText: 'ホームへ'/);
 assert.match(uninstallJs, /notifyText: '長押し'/);
-assert.match(uninstallJs, /notifyText: '確認してから'/);
+assert.match(uninstallJs, /notifyText: '「削除」をタップ'/);
+// TTS stays fuller pre-#35/#36 baseline (88d07c7) — not the short notify line.
+assert.match(
+  uninstallJs,
+  /UNINSTALL_CONSEQUENCE_VOICE[\s\S]{0,80}写真やメモ/,
+);
+assert.doesNotMatch(uninstallJs, /voiceText:\s*'「削除」をタップ'/);
+assert.doesNotMatch(uninstallJs, /voiceText:\s*'長押し'/);
 
 console.log('smoke-notify-privacy: OK');
 console.log(

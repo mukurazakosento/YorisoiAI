@@ -1,8 +1,11 @@
 /**
- * Heads-up / local instruction notify bodies must be short essentials (≤17 Japanese chars).
+ * Heads-up / local instruction notify bodies must be short action-only lines
+ * (≤17 Japanese chars), e.g. 「通知」をタップ / 長押し.
  * Do not ship long prose and truncate into gibberish — author or derive a minimal line.
  * Mirrors AssistNotifyCopy + AssistNotifier.MAX_INSTRUCTION_CHARS.
- * TTS / in-app displayText stay longer at the call site.
+ *
+ * TTS / in-app displayText stay the fuller pre-#35/#36 spoken baseline
+ * (restore ref: 88d07c7 / PR #34 tip) at the call site — never reuse this notify line as voiceText.
  */
 
 export const MAX_INSTRUCTION_NOTIFY_CHARS = 17;
@@ -22,17 +25,31 @@ export function truncateInstructionNotifyText(
   return `${trimmed.slice(0, maxChars - 1)}…`;
 }
 
+/** 「ラベル」をタップ — action-only notify (≤17). */
 export function tapNotify(label: string): string {
   const cleaned = label.trim() || '項目';
-  const candidate = `「${cleaned}」を押す`;
+  const candidate = `「${cleaned}」をタップ`;
   if (candidate.length <= MAX_INSTRUCTION_NOTIFY_CHARS) {
     return candidate;
   }
-  const budget = MAX_INSTRUCTION_NOTIFY_CHARS - 5;
+  // 「」をタップ = 6 chars overhead
+  const budget = MAX_INSTRUCTION_NOTIFY_CHARS - 6;
   if (budget >= 2) {
-    return `「${cleaned.slice(0, budget)}」を押す`;
+    return `「${cleaned.slice(0, budget)}」をタップ`;
   }
-  return '項目を押す';
+  return '項目をタップ';
+}
+
+/** 長押し — or 「ラベル」長押し when a short label fits. */
+export function longPressNotify(label = ''): string {
+  const cleaned = label.trim();
+  if (cleaned) {
+    const candidate = `「${cleaned}」長押し`;
+    if (candidate.length <= MAX_INSTRUCTION_NOTIFY_CHARS) {
+      return candidate;
+    }
+  }
+  return MINIMAL_NOTIFY_SAMPLES.longPress;
 }
 
 export function scrollNotify(lookFor = '', direction = '下へ'): string {
@@ -54,8 +71,8 @@ export function scrollNotify(lookFor = '', direction = '下へ'): string {
 export const MINIMAL_NOTIFY_SAMPLES = {
   goHome: 'ホームへ',
   longPress: '長押し',
-  tapDelete: '削除を押す',
-  confirm: '確認してから',
+  tapDelete: '「削除」をタップ',
+  confirm: '「削除」をタップ',
   openMail: 'メールを開く',
   showNumber: '番号を出す',
   checkNumber: '番号を確認',
@@ -109,7 +126,7 @@ function byStageOrStep(stageId: string, stepId: string): string | null {
     case 'uninstall-menu':
       return MINIMAL_NOTIFY_SAMPLES.tapDelete;
     case 'uninstall-confirm':
-      return MINIMAL_NOTIFY_SAMPLES.confirm;
+      return MINIMAL_NOTIFY_SAMPLES.confirm; // 「削除」をタップ
     case 'safety-wait':
       return stepId.includes('email')
         ? MINIMAL_NOTIFY_SAMPLES.openMail
@@ -206,7 +223,8 @@ function fromDisplayPatterns(displayText: string): string | null {
     return MINIMAL_NOTIFY_SAMPLES.unreadable;
   }
 
-  const tap = /「([^」]{1,20})」(?:を|から)?(?:押|選)/.exec(t);
+  // Prefer quoted tap/select targets → 「ラベル」をタップ
+  const tap = /「([^」]{1,20})」(?:を|から)?(?:タップ|押|選)/.exec(t);
   if (tap) {
     return tapNotify(tap[1]);
   }
@@ -223,7 +241,7 @@ function fromDisplayPatterns(displayText: string): string | null {
     if (candidate.length <= MAX_INSTRUCTION_NOTIFY_CHARS) {
       return candidate;
     }
-    return 'どちらを押す';
+    return 'どちらをタップ';
   }
 
   if (t.includes('カメラ') && t.includes('聞いている')) {

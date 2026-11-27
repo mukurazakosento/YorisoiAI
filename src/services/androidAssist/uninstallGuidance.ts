@@ -18,7 +18,10 @@ export type UninstallGuidanceStep = {
   stageId: UninstallStageId;
   displayText: string;
   voiceText: string;
-  /** Heads-up body: short essentials ≤17 chars (TTS uses voiceText). */
+  /**
+   * Heads-up body: short action-only ≤17 (e.g. 「削除」をタップ / 長押し).
+   * TTS uses fuller voiceText (pre-#35/#36 baseline 88d07c7) — not this notify line.
+   */
   notifyText: string;
 };
 
@@ -193,7 +196,7 @@ export function buildUninstallAntiLoopStep(
       displayText:
         'メニューの「削除」を選ぶ前に、残しておきたいものがないか確認しましょう。',
       voiceText: `${UNINSTALL_CONSEQUENCE_VOICE} やめたければ「キャンセル」です。代わりには押しません。`,
-      notifyText: '確認してから',
+      notifyText: '「削除」をタップ',
     };
   }
   if (stage === 'uninstall-confirm') {
@@ -203,7 +206,7 @@ export function buildUninstallAntiLoopStep(
       displayText:
         '消す前に、残しておきたいものがないか確認しましょう。やめるなら「キャンセル」です。',
       voiceText: `${UNINSTALL_CONSEQUENCE_VOICE} やめたければ「キャンセル」や「いいえ」を押してください。よりそいAIは代わりに押しません。`,
-      notifyText: '確認してから',
+      notifyText: '「削除」をタップ',
     };
   }
   // long-press (default): nudge toward looking for the menu without second-counting
@@ -214,7 +217,7 @@ export function buildUninstallAntiLoopStep(
       'メニューが出たら「削除」や「アンインストール」を探してください。',
     voiceText:
       '同じ案内が続いています。長押しでメニューや小さな窓が出たら指を離し、「削除」や「アンインストール」を探してください。見えなければ、一度指を離してもう一度長押ししてみてください。代わりには消しません。',
-    notifyText: '削除を探す',
+    notifyText: '長押し',
   };
 }
 
@@ -395,7 +398,7 @@ function uninstallTapDeleteStep(raw: string, o: string): UninstallGuidanceStep {
     stageId: 'uninstall-menu',
     displayText: `メニューから${quoted}を選ぶと、アプリをスマートフォンから取り除けます。`,
     voiceText: `${UNINSTALL_CONSEQUENCE_VOICE} 押すと確認の画面が出ることが多いです。まだ消えていません。代わりには押しません。`,
-    notifyText: label ? tapNotify(label) : '削除を押す',
+    notifyText: label ? tapNotify(label) : '「削除」をタップ',
   };
 }
 
@@ -411,7 +414,7 @@ function uninstallConfirmConsequenceStep(
     displayText:
       '消す前に、残しておきたいものがないか確認しましょう。やめるなら「キャンセル」です。',
     voiceText: `${UNINSTALL_CONSEQUENCE_VOICE} やめたければ「キャンセル」や「いいえ」を押してください。よりそいAIは代わりに押しません。`,
-    notifyText: '確認してから',
+    notifyText: '「削除」をタップ',
   };
 }
 
