@@ -14,6 +14,24 @@ object AssistNotifier {
   const val FOREGROUND_ID = 42041
   const val GUIDANCE_ID = 42042
 
+  /**
+   * Heads-up / FGS instruction lines must stay ≤17 Japanese characters.
+   * TTS and in-app displayText stay full length at the call site.
+   */
+  const val MAX_INSTRUCTION_CHARS = 17
+
+  /** Truncate notify title/body to [MAX_INSTRUCTION_CHARS] (ellipsis when cut). */
+  fun truncateForNotify(text: String, maxChars: Int = MAX_INSTRUCTION_CHARS): String {
+    val trimmed = text.trim()
+    if (trimmed.length <= maxChars) {
+      return trimmed
+    }
+    if (maxChars <= 1) {
+      return trimmed.take(maxChars)
+    }
+    return trimmed.take(maxChars - 1) + "…"
+  }
+
   fun ensureChannel(context: Context) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
       return
@@ -56,9 +74,12 @@ object AssistNotifier {
       null
     }
 
-    val safeBody = AssistSecretRedactor.forPublicText(body)
+    val safeBody = truncateForNotify(AssistSecretRedactor.forPublicText(body))
+    val title = truncateForNotify(
+      if (paused) "よりそいAI（一時停止）" else "よりそいAI（支援中）",
+    )
     val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-      .setContentTitle(if (paused) "よりそいAI（一時停止）" else "よりそいAI（支援中）")
+      .setContentTitle(title)
       .setContentText(safeBody)
       .setSmallIcon(android.R.drawable.ic_menu_info_details)
       .setOngoing(true)
@@ -121,9 +142,10 @@ object AssistNotifier {
       // Keep tap inert for safety results (no Activity reopen).
       null
     }
-    val safeBody = AssistSecretRedactor.forPublicText(body)
+    val safeTitle = truncateForNotify(title)
+    val safeBody = truncateForNotify(AssistSecretRedactor.forPublicText(body))
     val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-      .setContentTitle(title)
+      .setContentTitle(safeTitle)
       .setContentText(safeBody)
       .setStyle(NotificationCompat.BigTextStyle().bigText(safeBody))
       .setSmallIcon(android.R.drawable.ic_menu_info_details)
