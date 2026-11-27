@@ -103,6 +103,7 @@ object AssistUninstallGuidance {
           stageId = "uninstall-long-press",
           displayText = longPress.displayText,
           voiceText = longPress.voiceText,
+          notifyText = longPress.notifyText,
         )
       }
       "uninstall-menu" ->
@@ -113,6 +114,7 @@ object AssistUninstallGuidance {
             "メニューの「削除」を選ぶ前に、残しておきたいものがないか確認しましょう。",
           voiceText =
             "$CONSEQUENCE_VOICE やめたければ「キャンセル」です。代わりには押しません。",
+          notifyText = "確認してから",
         )
       "uninstall-confirm" ->
         AssistGuidanceRules.Step(
@@ -122,6 +124,7 @@ object AssistUninstallGuidance {
             "消す前に、残しておきたいものがないか確認しましょう。やめるなら「キャンセル」です。",
           voiceText =
             "$CONSEQUENCE_VOICE やめたければ「キャンセル」や「いいえ」を押してください。よりそいAIは代わりに押しません。",
+          notifyText = "確認してから",
         )
       else ->
         AssistGuidanceRules.Step(
@@ -131,6 +134,7 @@ object AssistUninstallGuidance {
             "メニューが出たら「削除」や「アンインストール」を探してください。",
           voiceText =
             "同じ案内が続いています。長押しでメニューや小さな窓が出たら指を離し、「削除」や「アンインストール」を探してください。見えなければ、一度指を離してもう一度長押ししてみてください。代わりには消しません。",
+          notifyText = "削除を探す",
         )
     }
   }
@@ -266,6 +270,7 @@ object AssistUninstallGuidance {
       displayText = "ホーム画面から、消したいアプリのある画面まで行ってください。",
       voiceText =
         "ホーム画面から、消したいアプリのある画面まで行ってください。アプリの絵文字マークが見えるところです。よりそいAIは代わりに消しません。",
+      notifyText = "ホームへ",
     )
   }
 
@@ -276,18 +281,26 @@ object AssistUninstallGuidance {
       displayText = "消したいアプリを長押しして、メニューが出るまで待ってください。",
       voiceText =
         "消したいアプリのアイコンを指で長押ししてください。メニューや小さな窓が出るまで、そのまま押したままにしてください。メニューが出たら指を離してください。",
+      notifyText = "長押し",
     )
   }
 
   private fun tapDeleteStep(raw: String, o: String): AssistGuidanceRules.Step {
     val label = pickDeleteLabel(raw, o)
     val quoted = if (label != null) "「$label」" else "「削除」や「アンインストール」"
+    val notify =
+      if (label != null) {
+        AssistNotifyCopy.tap(label)
+      } else {
+        "削除を押す"
+      }
     return AssistGuidanceRules.Step(
       stepId = "uninstall-tap-delete",
       stageId = "uninstall-menu",
       displayText = "メニューから${quoted}を選ぶと、アプリをスマートフォンから取り除けます。",
       voiceText =
         "$CONSEQUENCE_VOICE 押すと確認の画面が出ることが多いです。まだ消えていません。代わりには押しません。",
+      notifyText = notify,
     )
   }
 
@@ -299,6 +312,7 @@ object AssistUninstallGuidance {
         "消す前に、残しておきたいものがないか確認しましょう。やめるなら「キャンセル」です。",
       voiceText =
         "$CONSEQUENCE_VOICE やめたければ「キャンセル」や「いいえ」を押してください。よりそいAIは代わりに押しません。",
+      notifyText = "確認してから",
     )
   }
 

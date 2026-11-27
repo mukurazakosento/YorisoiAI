@@ -142,7 +142,7 @@ class AssistForegroundService : Service() {
           paused = true
           phase = "paused"
           tts?.stop()
-          updateForeground("一時停止中（画面は読み取りません）")
+          updateForeground(AssistNotifyCopy.statusPaused())
           YorisoiAndroidAssistModule.emitPhase("paused", null)
         }
         return START_STICKY
@@ -151,7 +151,7 @@ class AssistForegroundService : Service() {
         if (running && mediaProjection != null) {
           paused = false
           phase = "running"
-          updateForeground("画面を読み取りながら案内しています")
+          updateForeground(AssistNotifyCopy.statusRunning())
           YorisoiAndroidAssistModule.emitPhase("running", null)
         }
         return START_STICKY
@@ -214,7 +214,7 @@ class AssistForegroundService : Service() {
     lastStepId = ""
     val notification = AssistNotifier.buildForegroundNotification(
       this,
-      "画面を読み取りながら案内しています（画像は送りません）",
+      AssistNotifyCopy.statusRunning(),
       paused = false,
     )
     if (Build.VERSION.SDK_INT >= 29) {
@@ -385,11 +385,14 @@ class AssistForegroundService : Service() {
       // Redact PII for notify / FGS / TTS / emitted display (OCR quotes may leak secrets).
       val safeDisplay = AssistSecretRedactor.forPublicText(guidance.displayText)
       val safeVoice = AssistSecretRedactor.forVoice(guidance.voiceText)
+      // Notify/FGS: short essentials ≤17 — not truncated long prose.
+      val safeNotify =
+        AssistSecretRedactor.forPublicText(AssistNotifyCopy.fromGuidance(guidance))
       lastGuidance = safeDisplay
       // Safety results: notify + TTS only — do not reopen the Activity on tap.
       val openAppOnTap = featureId != "safetyCheck"
-      AssistNotifier.showGuidance(this, "よりそいAI", safeDisplay, openAppOnTap)
-      updateForeground(safeDisplay)
+      AssistNotifier.showGuidance(this, "よりそいAI", safeNotify, openAppOnTap)
+      updateForeground(safeNotify)
       if (voiceEnabled) {
         tts?.speakLatest(safeVoice)
       }

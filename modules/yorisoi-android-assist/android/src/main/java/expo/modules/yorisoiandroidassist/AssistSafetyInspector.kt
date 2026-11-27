@@ -13,6 +13,8 @@ object AssistSafetyInspector {
     val displayText: String,
     val voiceText: String,
     val riskLevel: String,
+    /** Heads-up body: short essentials ≤17 chars. */
+    val notifyText: String = "",
   )
 
   private val phoneRe =
@@ -61,6 +63,7 @@ object AssistSafetyInspector {
         displayText = "メールやメッセージを開いてください。見つかったら通知でお伝えします。",
         // Short waiting preamble only — keep long reason/actions TTS on the result hit.
         voiceText = "メールやメッセージを開いてください。見つかったらお伝えします。",
+        notifyText = "メールを開く",
       )
     } else {
       AssistGuidanceRules.Step(
@@ -69,17 +72,28 @@ object AssistSafetyInspector {
         displayText = "電話アプリで番号を出してください。見つかったら通知でお伝えします。",
         voiceText =
           "電話アプリを開いて、気になる番号が見えるようにしてください。番号が見つかったら、通知と音声でお伝えします。アプリに戻らなくて大丈夫です。自動ではかけません。",
+        notifyText = "番号を出す",
       )
     }
   }
 
   fun toGuidanceStep(finding: Finding): AssistGuidanceRules.Step {
+    val notify =
+      finding.notifyText.ifBlank {
+        AssistNotifyCopy.resolve(
+          notifyText = "",
+          displayText = finding.displayText,
+          stageId = "safety-result",
+          stepId = "safety-hit-${finding.fingerprint}",
+        )
+      }
     return AssistGuidanceRules.Step(
       stepId = "safety-hit-${finding.fingerprint}",
       stageId = "safety-result",
       displayText = finding.displayText,
       voiceText = finding.voiceText,
       mode = "demo",
+      notifyText = notify,
     )
   }
 
@@ -119,6 +133,7 @@ object AssistSafetyInspector {
       displayText = display.take(80),
       voiceText = voice,
       riskLevel = "insufficient_info",
+      notifyText = "番号を確認",
     )
   }
 
@@ -158,6 +173,7 @@ object AssistSafetyInspector {
         voiceText =
           "$senderNote 詐欺の可能性が高いメールです。怪しいと考えられる理由: $reasons。URLは開かず、個人情報や振込もしないでください。不安なら家族か、警察相談のシャープくじゅういちゼロに相談してください。絶対に詐欺とは言い切りませんが、急いで手続きしないでください。自動では送りません。",
         riskLevel = "dangerous",
+        notifyText = "詐欺の恐れ",
       )
     }
 
@@ -171,6 +187,7 @@ object AssistSafetyInspector {
           voiceText =
             "$senderNote 詐欺の可能性が高いメールです。怪しいと考えられる理由: $labels。リンクは開かず、返信しないでください。安全とは言いません。自動では送りません。",
           riskLevel = "dangerous",
+          notifyText = "詐欺の恐れ",
         )
       }
       hits.isNotEmpty() || urls.isNotEmpty() -> {
@@ -181,6 +198,7 @@ object AssistSafetyInspector {
           voiceText =
             "$senderNote 気になる点があります。リンクを開いたり個人情報を送ったりする前に、公式の案内と見比べてください。安全とは言い切れません。自動では送りません。",
           riskLevel = "caution",
+          notifyText = "注意が必要",
         )
       }
       else -> {
@@ -191,6 +209,7 @@ object AssistSafetyInspector {
           voiceText =
             "$senderNote 目立った危険な言い回しは見つかりませんでしたが、それだけで安全とは言いません。不安なら返信を急がないでください。自動では送りません。",
           riskLevel = "insufficient_info",
+          notifyText = "判断できません",
         )
       }
     }

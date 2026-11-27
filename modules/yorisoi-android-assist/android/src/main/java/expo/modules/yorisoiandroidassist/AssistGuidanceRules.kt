@@ -13,6 +13,11 @@ object AssistGuidanceRules {
     val voiceText: String,
     /** Always "demo" until native Llama is connected. */
     val mode: String = "demo",
+    /**
+     * Heads-up / FGS body: short essentials ≤17 chars (e.g. 「ホームへ」「長押し」).
+     * Empty → AssistNotifyCopy derives from stage/display. TTS uses [voiceText].
+     */
+    val notifyText: String = "",
   )
 
   fun buildNextStep(
@@ -98,12 +103,35 @@ object AssistGuidanceRules {
         goal = goalSummary,
       )
     if (kind == "keep") {
-      return step
+      if (step.notifyText.isNotBlank()) {
+        return step
+      }
+      return step.copy(
+        notifyText =
+          AssistNotifyCopy.resolve(
+            notifyText = "",
+            displayText = step.displayText,
+            stageId = step.stageId,
+            stepId = step.stepId,
+          ),
+      )
     }
+    val notify =
+      when (kind) {
+        "scroll" ->
+          AssistNotifyCopy.fromDisplayPatternsSafe(display) ?: AssistNotifyCopy.scroll()
+        "tap" ->
+          AssistNotifyCopy.fromDisplayPatternsSafe(display) ?: AssistNotifyCopy.tap("項目")
+        "ask" ->
+          AssistNotifyCopy.fromDisplayPatternsSafe(display) ?: "どちらを押す"
+        else ->
+          AssistNotifyCopy.resolve("", display, step.stageId, step.stepId)
+      }
     return step.copy(
       stepId = if (kind == "scroll") "${step.stepId}-scroll" else step.stepId,
       displayText = display,
       voiceText = voice,
+      notifyText = notify,
     )
   }
 
@@ -113,6 +141,7 @@ object AssistGuidanceRules {
       stageId = "unreadable",
       displayText = "画面をうまく読み取れませんでした。",
       voiceText = "画面をうまく読み取れませんでした。明るいところで、もう少し待つか、アプリに戻ってください。",
+      notifyText = "読み取れず",
     )
   }
 

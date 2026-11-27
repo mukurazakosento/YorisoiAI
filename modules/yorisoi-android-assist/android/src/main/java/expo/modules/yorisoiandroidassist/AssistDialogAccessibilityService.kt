@@ -139,13 +139,15 @@ class AssistDialogAccessibilityService : AccessibilityService() {
     val step = AssistPopupExplainer.explain(detection)
     val safeDisplay = AssistSecretRedactor.forPublicText(step.displayText)
     val safeVoice = AssistSecretRedactor.forVoice(step.voiceText)
+    val safeNotify =
+      AssistSecretRedactor.forPublicText(AssistNotifyCopy.fromGuidance(step))
 
     lastAnnouncedFingerprint = detection.fingerprint
     lastAnnounceAtMs = now
     lastAnnouncedSignature = signature
 
-    // Notify + TTS without bringing the Activity to the front.
-    AssistNotifier.showGuidance(this, "よりそいAI", safeDisplay)
+    // Notify (short essentials) + TTS (full voice) without bringing Activity front.
+    AssistNotifier.showGuidance(this, "よりそいAI", safeNotify)
     tts?.speakLatest(safeVoice)
 
     YorisoiAndroidAssistModule.emitOcrChanged(

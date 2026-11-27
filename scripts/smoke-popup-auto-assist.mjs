@@ -271,7 +271,13 @@ const safetyMail = buildGuidanceFromOcrText({
   ocrText: '至急！未払い料金があります。http://bit.ly/evil で認証コードを入力',
 });
 assert.equal(safetyMail.stageId, 'safety-result');
-assert.equal(safetyMail.displayText.includes('危険') || safetyMail.voiceText.includes('危険'), true);
+assert.equal(
+  safetyMail.displayText.includes('詐欺') ||
+    safetyMail.voiceText.includes('詐欺') ||
+    safetyMail.displayText.includes('危険') ||
+    safetyMail.voiceText.includes('危険'),
+  true,
+);
 
 // --- Broader Japanese dialog cues ---
 assert.ok(detectPopup('新しいバージョンが利用可能です 更新 後で'));

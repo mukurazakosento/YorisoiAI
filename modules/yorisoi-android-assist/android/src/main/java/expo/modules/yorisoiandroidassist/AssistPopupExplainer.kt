@@ -39,12 +39,14 @@ object AssistPopupExplainer {
     val voice = AssistSecretRedactor.forVoice(voiceRaw)
     val safeDisplay = AssistSecretRedactor.forPublicText(display)
     val stepId = "popup-${detection.fingerprint.hashCode().toUInt()}"
+    val stageId = "popup-${detection.kind.name.lowercase()}"
     return AssistGuidanceRules.Step(
       stepId = stepId,
-      stageId = "popup-${detection.kind.name.lowercase()}",
+      stageId = stageId,
       displayText = safeDisplay,
       voiceText = voice,
       mode = "demo",
+      notifyText = notifyForPopup(detection.kind),
     )
   }
 
@@ -63,6 +65,7 @@ object AssistPopupExplainer {
         displayText = "秘密の文字があるので詳しく読み上げません。",
         voiceText = "パスワードや番号らしき文字があるので、詳しくは読み上げません。自分の目で確認してください。",
         mode = "demo",
+        notifyText = "秘密あり",
       )
     }
     val clipped = if (raw.length > 80) raw.take(80) + "…" else raw
@@ -77,7 +80,25 @@ object AssistPopupExplainer {
       displayText = "画面には「${safeClip.take(40)}」とあります。",
       voiceText = "いまの画面の文字は、だいたい次のとおりです。「$safeClip」。分からなければアプリに戻って聞いてください。代わりには操作しません。",
       mode = "demo",
+      notifyText = "画面を確認",
     )
+  }
+
+  private fun notifyForPopup(kind: AssistPopupDetector.PopupKind): String {
+    return when (kind) {
+      AssistPopupDetector.PopupKind.PERMISSION_CAMERA -> "カメラ許可？"
+      AssistPopupDetector.PopupKind.PERMISSION_MIC -> "マイク許可？"
+      AssistPopupDetector.PopupKind.PERMISSION_PHOTOS -> "写真許可？"
+      AssistPopupDetector.PopupKind.PERMISSION_NOTIFICATIONS -> "通知許可？"
+      AssistPopupDetector.PopupKind.PERMISSION_LOCATION -> "位置許可？"
+      AssistPopupDetector.PopupKind.PERMISSION_CONTACTS -> "連絡先許可？"
+      AssistPopupDetector.PopupKind.PERMISSION_FILES -> "ファイル許可？"
+      AssistPopupDetector.PopupKind.PERMISSION_GENERIC -> "許可を選ぶ"
+      AssistPopupDetector.PopupKind.TERMS -> "規約を確認"
+      AssistPopupDetector.PopupKind.UPDATE -> "更新を確認"
+      AssistPopupDetector.PopupKind.INSTALL -> "インストール？"
+      AssistPopupDetector.PopupKind.UNKNOWN_DIALOG -> "確認画面"
+    }
   }
 
   private data class Parts(
