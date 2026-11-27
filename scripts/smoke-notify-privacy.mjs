@@ -23,6 +23,12 @@ const notifier = read(
 assert.match(notifier, /VISIBILITY_PRIVATE/);
 assert.doesNotMatch(notifier, /VISIBILITY_PUBLIC/);
 assert.match(notifier, /AssistSecretRedactor\.forPublicText/);
+assert.match(notifier, /MAX_INSTRUCTION_CHARS\s*=\s*17/);
+assert.match(notifier, /fun truncateForNotify/);
+assert.match(notifier, /truncateForNotify\(AssistSecretRedactor\.forPublicText/);
+assert.match(notifier, /val safeTitle = truncateForNotify\(title\)/);
+// Instruction notify title/body must stay ≤17 Japanese chars (ellipsis when cut).
+assert.match(notifier, /take\(maxChars\s*-\s*1\)\s*\+\s*"…"/);
 
 const redactor = read(
   'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistSecretRedactor.kt',
@@ -80,5 +86,31 @@ const sensitiveExplain = explainScreenText('パスワード: hunter2 を入力')
 assert.equal(sensitiveExplain.stageId, 'explain-sensitive');
 assert.doesNotMatch(sensitiveExplain.displayText, /hunter2/);
 assert.doesNotMatch(sensitiveExplain.voiceText, /hunter2/);
+
+const notifyUrl = pathToFileURL(
+  path.join(root, 'src/services/notifications/truncateInstruction.ts'),
+).href;
+const {
+  MAX_INSTRUCTION_NOTIFY_CHARS,
+  truncateInstructionNotifyText,
+} = await import(notifyUrl);
+
+assert.equal(MAX_INSTRUCTION_NOTIFY_CHARS, 17);
+assert.equal(truncateInstructionNotifyText('短い案内'), '短い案内');
+assert.equal(truncateInstructionNotifyText('あ'.repeat(17)), 'あ'.repeat(17));
+const longOps = '「設定」を探して押してください。画面の文字が変わったら次へ進みます。';
+const truncatedOps = truncateInstructionNotifyText(longOps);
+assert.ok(truncatedOps.length <= 17);
+assert.equal(truncatedOps, `${longOps.slice(0, 16)}…`);
+const longSafety =
+  'この番号は緊急・公的な短い番号の形に見えます。断定はしません。';
+assert.ok(truncateInstructionNotifyText(longSafety).length <= 17);
+const longExplain =
+  '画面には「カメラへのアクセスを許可しますか？」と出ています。許可するか選んでください。';
+assert.ok(truncateInstructionNotifyText(longExplain).length <= 17);
+
+const notifyIndex = read('src/services/notifications/index.ts');
+assert.match(notifyIndex, /truncateInstructionNotifyText\(displayText\)/);
+assert.match(notifyIndex, /title:\s*truncateInstructionNotifyText\('よりそいAI'\)/);
 
 console.log('smoke-notify-privacy: OK');

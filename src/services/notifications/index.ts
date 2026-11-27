@@ -4,6 +4,12 @@ import { Platform } from 'react-native';
 import type { SessionNotificationKind } from '../../types/session';
 import { END_SUPPORT_DISPLAY } from '../session/demoSteps';
 
+export {
+  MAX_INSTRUCTION_NOTIFY_CHARS,
+  truncateInstructionNotifyText,
+} from './truncateInstruction';
+import { truncateInstructionNotifyText } from './truncateInstruction';
+
 export const END_SUPPORT_NOTIFICATION_DATA = {
   kind: 'end_support' as SessionNotificationKind,
 };
@@ -100,7 +106,7 @@ export async function ensureNotificationPermission(): Promise<SessionNotificatio
 export async function presentInstructionNotification(
   displayText: string,
 ): Promise<{ ok: boolean; reason?: string }> {
-  const text = displayText.trim();
+  const text = truncateInstructionNotifyText(displayText);
   if (!text) {
     return { ok: false, reason: 'empty' };
   }
@@ -113,7 +119,7 @@ export async function presentInstructionNotification(
   try {
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: 'よりそいAI',
+        title: truncateInstructionNotifyText('よりそいAI'),
         body: text,
         data: { ...INSTRUCTION_NOTIFICATION_DATA },
         sound: false,
