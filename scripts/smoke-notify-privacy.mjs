@@ -34,9 +34,10 @@ const notifyCopy = read(
 );
 assert.match(notifyCopy, /object AssistNotifyCopy/);
 assert.match(notifyCopy, /fun fromGuidance/);
-assert.match(notifyCopy, /ホームへ/);
-assert.match(notifyCopy, /長押し/);
-assert.match(notifyCopy, /「削除」をタップ|をタップ/);
+assert.match(notifyCopy, /消したいアプリを表示/);
+assert.match(notifyCopy, /アイコンを長押し/);
+assert.match(notifyCopy, /削除項目を確認/);
+assert.match(notifyCopy, /をタップ/);
 assert.match(notifyCopy, /詐欺の恐れ/);
 assert.match(notifyCopy, /カメラ許可？/);
 
@@ -81,9 +82,9 @@ assert.match(explainer, /画面を確認/);
 const uninstallKt = read(
   'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistUninstallGuidance.kt',
 );
-assert.match(uninstallKt, /notifyText = "ホームへ"/);
-assert.match(uninstallKt, /notifyText = "長押し"/);
-assert.match(uninstallKt, /notifyText = "「削除」をタップ"/);
+assert.match(uninstallKt, /SHOW_APP_NOTIFY = "消したいアプリを表示"/);
+assert.match(uninstallKt, /LONG_PRESS_NOTIFY = "アイコンを長押し"/);
+assert.match(uninstallKt, /CONFIRM_DELETE_NOTIFY = "削除項目を確認"/);
 
 const safetyKt = read(
   'modules/yorisoi-android-assist/android/src/main/java/expo/modules/yorisoiandroidassist/AssistSafetyInspector.kt',
@@ -154,31 +155,34 @@ for (const sample of samples) {
     `sample too long: ${sample} (${sample.length})`,
   );
 }
-assert.equal(MINIMAL_NOTIFY_SAMPLES.goHome, 'ホームへ');
-assert.equal(MINIMAL_NOTIFY_SAMPLES.longPress, '長押し');
-assert.equal(MINIMAL_NOTIFY_SAMPLES.tapDelete, '「削除」をタップ');
-assert.equal(MINIMAL_NOTIFY_SAMPLES.confirm, '「削除」をタップ');
+assert.equal(MINIMAL_NOTIFY_SAMPLES.goHome, '消したいアプリを表示');
+assert.equal(MINIMAL_NOTIFY_SAMPLES.longPress, 'アイコンを長押し');
+assert.equal(MINIMAL_NOTIFY_SAMPLES.tapDelete, '削除項目を確認');
+assert.equal(MINIMAL_NOTIFY_SAMPLES.confirm, '削除項目を確認');
+assert.ok(MINIMAL_NOTIFY_SAMPLES.goHome.length <= 17);
+assert.ok(MINIMAL_NOTIFY_SAMPLES.longPress.length <= 17);
+assert.ok(MINIMAL_NOTIFY_SAMPLES.tapDelete.length <= 17);
 assert.equal(MINIMAL_NOTIFY_SAMPLES.scamRisk, '詐欺の恐れ');
 assert.equal(MINIMAL_NOTIFY_SAMPLES.cameraPerm, 'カメラ許可？');
 
 // Ops / safety / text-explain: resolve to usable short action essentials (not gibberish cut).
 assert.equal(
   resolveMinimalNotifyInstruction(
-    'ホーム画面から、消したいアプリのある画面まで行ってください。',
+    '消したいアプリが見えるところまで進んでください。',
   ),
-  'ホームへ',
+  '消したいアプリを表示',
 );
 assert.equal(
   resolveMinimalNotifyInstruction(
-    '消したいアプリを長押しして、メニューが出るまで待ってください。',
+    '消したいアプリのアイコンを長押ししてください。',
   ),
-  '長押し',
+  'アイコンを長押し',
 );
 assert.equal(
   resolveMinimalNotifyInstruction(
-    'メニューから「削除」を選ぶと、アプリをスマートフォンから取り除けます。',
+    'メニューの削除の項目を確認してから、ご自身で押してください。',
   ),
-  '「削除」をタップ',
+  '削除項目を確認',
 );
 assert.equal(
   resolveMinimalNotifyInstruction(
@@ -226,10 +230,18 @@ assert.equal(
 );
 assert.equal(
   resolveMinimalNotifyInstruction('x', {
-    notifyText: 'ホームへ',
+    notifyText: '消したいアプリを表示',
     stageId: 'uninstall-go-home',
   }),
-  'ホームへ',
+  '消したいアプリを表示',
+);
+assert.equal(
+  resolveMinimalNotifyInstruction('x', { stageId: 'uninstall-long-press' }),
+  'アイコンを長押し',
+);
+assert.equal(
+  resolveMinimalNotifyInstruction('x', { stageId: 'uninstall-menu' }),
+  '削除項目を確認',
 );
 assert.equal(tapNotify('削除'), '「削除」をタップ');
 assert.equal(scrollNotify('通知'), '「通知」を探す');
@@ -259,16 +271,14 @@ assert.doesNotMatch(
 );
 
 const uninstallJs = read('src/services/androidAssist/uninstallGuidance.ts');
-assert.match(uninstallJs, /notifyText: 'ホームへ'/);
-assert.match(uninstallJs, /notifyText: '長押し'/);
-assert.match(uninstallJs, /notifyText: '「削除」をタップ'/);
-// TTS stays fuller pre-#35/#36 baseline (88d07c7) — not the short notify line.
-assert.match(
-  uninstallJs,
-  /UNINSTALL_CONSEQUENCE_VOICE[\s\S]{0,80}写真やメモ/,
-);
-assert.doesNotMatch(uninstallJs, /voiceText:\s*'「削除」をタップ'/);
-assert.doesNotMatch(uninstallJs, /voiceText:\s*'長押し'/);
+assert.match(uninstallJs, /UNINSTALL_SHOW_APP_NOTIFY = '消したいアプリを表示'/);
+assert.match(uninstallJs, /UNINSTALL_LONG_PRESS_NOTIFY = 'アイコンを長押し'/);
+assert.match(uninstallJs, /UNINSTALL_CONFIRM_DELETE_NOTIFY = '削除項目を確認'/);
+// TTS is the fuller verbatim uninstall copy — not the short notify line.
+assert.match(uninstallJs, /ご自身で削除の項目を押してください/);
+assert.match(uninstallJs, /ホーム画面かアプリ一覧を開いて/);
+assert.doesNotMatch(uninstallJs, /voiceText:\s*'削除項目を確認'/);
+assert.doesNotMatch(uninstallJs, /voiceText:\s*'アイコンを長押し'/);
 
 console.log('smoke-notify-privacy: OK');
 console.log(

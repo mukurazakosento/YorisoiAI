@@ -3,9 +3,11 @@ package expo.modules.yorisoiandroidassist
 /**
  * Uninstall-specialized elderly guidance (mirrors JS uninstallGuidance.ts).
  * No auto-tap / auto-uninstall / auto-confirm.
- * Ban hold-duration meta-advice ("don't count seconds").
- * Early step: go from Home to the screen that shows the app to remove.
- * go-home stall: after ~10s without OCR advance, continue to long-press guidance.
+ *
+ * 3 steps (notify ≤17 / TTS verbatim):
+ * ① 消したいアプリを表示 → ~10s advance to long-press
+ * ② アイコンを長押し → advance only when 「削除」 visible; else re-guide
+ * ③ 削除項目を確認 → user taps themselves
  */
 object AssistUninstallGuidance {
   val GOAL_SUMMARY = "アプリをアンインストールしたい"
@@ -16,16 +18,27 @@ object AssistUninstallGuidance {
    */
   const val GO_HOME_STALL_TIMEOUT_MS = 10_000L
 
-  /** Shared consequence explanation (menu + confirm). */
-  const val CONSEQUENCE_VOICE =
-    "メニューから削除を選ぶと、アプリをスマートフォンから取り除けます。アプリによっては、中に保存していた写真やメモなどが一緒に消えてしまう場合があります。消す前に、そのアプリの中に残しておきたいものがないか確認しましょう。"
+  const val SHOW_APP_NOTIFY = "消したいアプリを表示"
+  const val SHOW_APP_VOICE =
+    "ホーム画面かアプリ一覧を開いて、消したいアプリが見えるところまで進んでください。見つからないときは、画面を左右にスクロールして探してください。"
+
+  const val LONG_PRESS_NOTIFY = "アイコンを長押し"
+  const val LONG_PRESS_VOICE =
+    "消したいアプリのアイコンを指で押したままにしてください。アプリの近くに小さなメニューが表示されるまで押し続けてください。メニューが出たら指を離してください。"
+
+  const val CONFIRM_DELETE_NOTIFY = "削除項目を確認"
+  const val CONFIRM_DELETE_VOICE =
+    "メニューにある削除の項目を確認してください。これを選ぶと、アプリがスマホから取り除かれます。アプリによっては、中に保存していた写真やメモ、記録なども一緒に消える場合があります。残しておきたいものがないか確認してください。削除してよければ、ご自身で削除の項目を押してください。"
+
+  /** Shared step-③ TTS (export alias for older call sites / docs). */
+  const val CONSEQUENCE_VOICE = CONFIRM_DELETE_VOICE
 
   private val stageRank =
     mapOf(
       "uninstall-go-home" to 0,
       "uninstall-long-press" to 1,
       "uninstall-menu" to 2,
-      "uninstall-confirm" to 3,
+      "uninstall-confirm" to 2,
     )
 
   @Volatile private var lastStageId: String = ""
@@ -90,7 +103,7 @@ object AssistUninstallGuidance {
     return step
   }
 
-  /** Soft-advance when the same uninstall step repeats (anti-loop). */
+  /** Soft-advance / re-guide when the same uninstall step repeats (anti-loop). */
   fun antiLoopStep(stuckStageId: String?): AssistGuidanceRules.Step {
     val stage = normalizeStage(stuckStageId) ?: "uninstall-long-press"
     return when (stage) {
@@ -106,36 +119,28 @@ object AssistUninstallGuidance {
           notifyText = longPress.notifyText,
         )
       }
-      "uninstall-menu" ->
-        AssistGuidanceRules.Step(
-          stepId = "uninstall-anti-loop-menu",
-          stageId = "uninstall-menu",
-          displayText =
-            "メニューの「削除」を選ぶ前に、残しておきたいものがないか確認しましょう。",
-          voiceText =
-            "$CONSEQUENCE_VOICE やめたければ「キャンセル」です。代わりには押しません。",
-          notifyText = "「削除」をタップ",
-        )
-      "uninstall-confirm" ->
+      "uninstall-menu",
+      "uninstall-confirm",
+      -> {
+        val confirm = confirmDeleteStep(stage)
         AssistGuidanceRules.Step(
           stepId = "uninstall-anti-loop-confirm",
-          stageId = "uninstall-confirm",
-          displayText =
-            "消す前に、残しておきたいものがないか確認しましょう。やめるなら「キャンセル」です。",
-          voiceText =
-            "$CONSEQUENCE_VOICE やめたければ「キャンセル」や「いいえ」を押してください。よりそいAIは代わりに押しません。",
-          notifyText = "「削除」をタップ",
+          stageId = stage,
+          displayText = confirm.displayText,
+          voiceText = confirm.voiceText,
+          notifyText = confirm.notifyText,
         )
-      else ->
+      }
+      else -> {
+        val longPress = longPressStep()
         AssistGuidanceRules.Step(
           stepId = "uninstall-anti-loop-long-press",
           stageId = "uninstall-long-press",
-          displayText =
-            "メニューが出たら「削除」や「アンインストール」を探してください。",
-          voiceText =
-            "同じ案内が続いています。長押しでメニューや小さな窓が出たら指を離し、「削除」や「アンインストール」を探してください。見えなければ、一度指を離してもう一度長押ししてみてください。代わりには消しません。",
-          notifyText = "長押し",
+          displayText = longPress.displayText,
+          voiceText = longPress.voiceText,
+          notifyText = longPress.notifyText,
         )
+      }
     }
   }
 
@@ -155,8 +160,9 @@ object AssistUninstallGuidance {
   }
 
   private fun matchStageFromOcr(o: String): String {
-    if (looksLikeConfirmDialog(o)) return "uninstall-confirm"
-    if (looksLikeMenu(o)) return "uninstall-menu"
+    if (looksLikeDeleteLabelVisible(o)) {
+      return if (looksLikeConfirmDialog(o)) "uninstall-confirm" else "uninstall-menu"
+    }
     if (looksLikeHomeOrAppList(o)) return "uninstall-long-press"
     return "uninstall-go-home"
   }
@@ -199,13 +205,22 @@ object AssistUninstallGuidance {
     return "uninstall-go-home"
   }
 
-  private fun stepFor(stage: String, raw: String, o: String): AssistGuidanceRules.Step {
+  private fun stepFor(
+    stage: String,
+    @Suppress("UNUSED_PARAMETER") raw: String,
+    @Suppress("UNUSED_PARAMETER") o: String,
+  ): AssistGuidanceRules.Step {
     return when (stage) {
-      "uninstall-confirm" -> confirmConsequenceStep(raw, o)
-      "uninstall-menu" -> tapDeleteStep(raw, o)
+      "uninstall-confirm",
+      "uninstall-menu",
+      -> confirmDeleteStep(stage)
       "uninstall-long-press" -> longPressStep()
-      else -> goHomeStep()
+      else -> showAppStep()
     }
+  }
+
+  private fun looksLikeDeleteLabelVisible(o: String): Boolean {
+    return o.contains("削除") || o.contains("アンインストール")
   }
 
   private fun looksLikeConfirmDialog(o: String): Boolean {
@@ -217,24 +232,7 @@ object AssistUninstallGuidance {
         o.contains("取り消せ") ||
         o.contains("削除します") ||
         o.contains("アンインストールします")
-    val del =
-      o.contains("削除") || o.contains("アンインストール") || o.contains("消します")
-    return ask && del
-  }
-
-  private fun looksLikeMenu(o: String): Boolean {
-    return o.contains("アンインストール") ||
-      o.contains("アプリ情報") ||
-      (
-        o.contains("削除") &&
-          (
-            o.contains("アプリ") ||
-              o.contains("メニュー") ||
-              o.contains("編集") ||
-              o.contains("ウィジェット") ||
-              o.contains("無効")
-          )
-      )
+    return ask && looksLikeDeleteLabelVisible(o)
   }
 
   private fun looksLikeHomeOrAppList(o: String): Boolean {
@@ -263,14 +261,13 @@ object AssistUninstallGuidance {
     return hits >= 2
   }
 
-  private fun goHomeStep(): AssistGuidanceRules.Step {
+  private fun showAppStep(): AssistGuidanceRules.Step {
     return AssistGuidanceRules.Step(
       stepId = "uninstall-go-home",
       stageId = "uninstall-go-home",
-      displayText = "ホーム画面から、消したいアプリのある画面まで行ってください。",
-      voiceText =
-        "ホーム画面から、消したいアプリのある画面まで行ってください。アプリの絵文字マークが見えるところです。よりそいAIは代わりに消しません。",
-      notifyText = "ホームへ",
+      displayText = "消したいアプリが見えるところまで進んでください。",
+      voiceText = SHOW_APP_VOICE,
+      notifyText = SHOW_APP_NOTIFY,
     )
   }
 
@@ -278,59 +275,25 @@ object AssistUninstallGuidance {
     return AssistGuidanceRules.Step(
       stepId = "uninstall-long-press",
       stageId = "uninstall-long-press",
-      displayText = "消したいアプリを長押しして、メニューが出るまで待ってください。",
-      voiceText =
-        "消したいアプリのアイコンを指で長押ししてください。メニューや小さな窓が出るまで、そのまま押したままにしてください。メニューが出たら指を離してください。",
-      notifyText = "長押し",
+      displayText = "消したいアプリのアイコンを長押ししてください。",
+      voiceText = LONG_PRESS_VOICE,
+      notifyText = LONG_PRESS_NOTIFY,
     )
   }
 
-  private fun tapDeleteStep(raw: String, o: String): AssistGuidanceRules.Step {
-    val label = pickDeleteLabel(raw, o)
-    val quoted = if (label != null) "「$label」" else "「削除」や「アンインストール」"
-    val notify =
-      if (label != null) {
-        AssistNotifyCopy.tap(label)
-      } else {
-        "「削除」をタップ"
-      }
+  private fun confirmDeleteStep(stageId: String = "uninstall-menu"): AssistGuidanceRules.Step {
+    val sid = if (stageId == "uninstall-confirm") "uninstall-confirm" else "uninstall-menu"
     return AssistGuidanceRules.Step(
-      stepId = "uninstall-tap-delete",
-      stageId = "uninstall-menu",
-      displayText = "メニューから${quoted}を選ぶと、アプリをスマートフォンから取り除けます。",
-      voiceText =
-        "$CONSEQUENCE_VOICE 押すと確認の画面が出ることが多いです。まだ消えていません。代わりには押しません。",
-      notifyText = notify,
+      stepId =
+        if (sid == "uninstall-confirm") {
+          "uninstall-confirm-consequence"
+        } else {
+          "uninstall-tap-delete"
+        },
+      stageId = sid,
+      displayText = "メニューの削除の項目を確認してから、ご自身で押してください。",
+      voiceText = CONFIRM_DELETE_VOICE,
+      notifyText = CONFIRM_DELETE_NOTIFY,
     )
-  }
-
-  private fun confirmConsequenceStep(@Suppress("UNUSED_PARAMETER") raw: String, @Suppress("UNUSED_PARAMETER") o: String): AssistGuidanceRules.Step {
-    return AssistGuidanceRules.Step(
-      stepId = "uninstall-confirm-consequence",
-      stageId = "uninstall-confirm",
-      displayText =
-        "消す前に、残しておきたいものがないか確認しましょう。やめるなら「キャンセル」です。",
-      voiceText =
-        "$CONSEQUENCE_VOICE やめたければ「キャンセル」や「いいえ」を押してください。よりそいAIは代わりに押しません。",
-      notifyText = "「削除」をタップ",
-    )
-  }
-
-  private fun pickDeleteLabel(raw: String, o: String): String? {
-    val labels =
-      listOf(
-        "アンインストール",
-        "削除",
-        "アプリを削除",
-        "このアプリを削除",
-      )
-    for (label in labels) {
-      if (raw.contains(label) || o.contains(label.replace("\\s+".toRegex(), ""))) {
-        return label
-      }
-    }
-    if (o.contains("アンインストール")) return "アンインストール"
-    if (o.contains("削除")) return "削除"
-    return null
   }
 }

@@ -94,10 +94,10 @@ object AssistNotifyCopy {
 
   private fun byStageOrStep(stageId: String, stepId: String): String? {
     when (stageId) {
-      "uninstall-go-home" -> return "ホームへ"
-      "uninstall-long-press" -> return "長押し"
-      "uninstall-menu" -> return "「削除」をタップ"
-      "uninstall-confirm" -> return "「削除」をタップ"
+      "uninstall-go-home" -> return "消したいアプリを表示"
+      "uninstall-long-press" -> return "アイコンを長押し"
+      "uninstall-menu" -> return "削除項目を確認"
+      "uninstall-confirm" -> return "削除項目を確認"
       "safety-wait" ->
         return if (stepId.contains("email")) "メールを開く" else "番号を出す"
       "safety-result" -> return null // derive from display / risk wording
@@ -142,9 +142,16 @@ object AssistNotifyCopy {
       t.contains("公開情報では判断できません") -> return "判断できません"
       t.contains("メールやメッセージを開いて") -> return "メールを開く"
       t.contains("電話アプリで番号") || t.contains("番号を出して") -> return "番号を出す"
-      t.contains("長押し") -> return "長押し"
-      t.contains("ホーム画面") || t.startsWith("ホームへ") || t.contains("ホームから") ->
-        return "ホームへ"
+      t.contains("長押し") || t.contains("押したまま") -> return "アイコンを長押し"
+      t.contains("消したいアプリが見える") ||
+        t.contains("消したいアプリを表示") ||
+        t.contains("ホーム画面かアプリ一覧") ||
+        t.contains("ホーム画面") ||
+        t.startsWith("ホームへ") ||
+        t.contains("ホームから") -> return "消したいアプリを表示"
+      t.contains("削除の項目") ||
+        t.contains("削除項目を確認") ||
+        (t.contains("メニュー") && t.contains("削除")) -> return "削除項目を確認"
       t.contains("秘密の文字") -> return "秘密あり"
       t.contains("読み取れません") -> return "読み取れず"
     }

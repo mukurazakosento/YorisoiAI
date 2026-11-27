@@ -69,10 +69,13 @@ export function scrollNotify(lookFor = '', direction = '下へ'): string {
 
 /** Sample essentials used by smoke + call-site docs. */
 export const MINIMAL_NOTIFY_SAMPLES = {
-  goHome: 'ホームへ',
-  longPress: '長押し',
-  tapDelete: '「削除」をタップ',
-  confirm: '「削除」をタップ',
+  /** Uninstall ① — ≤17 */
+  goHome: '消したいアプリを表示',
+  /** Uninstall ② — ≤17 */
+  longPress: 'アイコンを長押し',
+  /** Uninstall ③ — ≤17 */
+  tapDelete: '削除項目を確認',
+  confirm: '削除項目を確認',
   openMail: 'メールを開く',
   showNumber: '番号を出す',
   checkNumber: '番号を確認',
@@ -206,15 +209,25 @@ function fromDisplayPatterns(displayText: string): string | null {
   if (t.includes('電話アプリで番号') || t.includes('番号を出して')) {
     return MINIMAL_NOTIFY_SAMPLES.showNumber;
   }
-  if (t.includes('長押し')) {
+  if (t.includes('長押し') || t.includes('押したまま')) {
     return MINIMAL_NOTIFY_SAMPLES.longPress;
   }
   if (
+    t.includes('消したいアプリが見える') ||
+    t.includes('消したいアプリを表示') ||
+    t.includes('ホーム画面かアプリ一覧') ||
     t.includes('ホーム画面') ||
     t.startsWith('ホームへ') ||
     t.includes('ホームから')
   ) {
     return MINIMAL_NOTIFY_SAMPLES.goHome;
+  }
+  if (
+    t.includes('削除の項目') ||
+    t.includes('削除項目を確認') ||
+    (t.includes('メニュー') && t.includes('削除'))
+  ) {
+    return MINIMAL_NOTIFY_SAMPLES.tapDelete;
   }
   if (t.includes('秘密の文字')) {
     return MINIMAL_NOTIFY_SAMPLES.secret;
